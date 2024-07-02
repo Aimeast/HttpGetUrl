@@ -1,0 +1,223 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GetUrl</title>
+    <link href="./bootstrap-5.3.0.min.css" rel="stylesheet">
+    <script src="./jquery-3.7.1.min.js"></script>
+    <style>
+        table, th, td {
+            word-wrap: break-word;
+            word-break: break-all;
+        }
+
+        #referrer:focus {
+            color: black;
+        }
+
+        .btn-sm {
+            font-size: 0.85rem;
+        }
+
+        .input-group-text {
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .table-responsive-stack thead {
+                display: none;
+            }
+
+            .table-responsive-stack tr {
+                display: flex;
+                flex-direction: column;
+                border: 1px solid #ddd;
+                margin-bottom: 10px;
+            }
+
+            .table-responsive-stack td, .table-responsive-stack th {
+                display: block;
+                text-align: right;
+                border: none;
+            }
+
+                .table-responsive-stack td::before {
+                    content: attr(data-label);
+                    float: left;
+                    font-weight: bold;
+                }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="mb-3">
+            <label for="url" class="form-label">Url</label>
+            <div class="input-group">
+                <input type="text" class="form-control" id="url">
+                <span class="input-group-text" id="clear-url">×</span>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label for="referrer" class="form-label">Referrer</label>
+            <input type="text" class="form-control" id="referrer" readonly>
+        </div>
+        <button id="submit" class="btn btn-primary">Submit</button>
+        <button id="refresh" class="btn btn-secondary">Refresh</button>
+        <div id="error-message" class="alert alert-danger mt-3" style="display: none;"></div>
+        <div class="table-responsive">
+            <table class="table table-responsive-stack table-striped mt-3">
+                <thead>
+                    <tr>
+                        <th>Datetime</th>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Url</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Data will be appended here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            // UI
+            function showError(message) {
+                $('#error-message').text(message).show();
+            }
+
+            function hideError() {
+                $('#error-message').hide();
+            }
+
+            function handleUrlInput() {
+                const url = $('#url').val();
+                const referrer = getUrlParent(url);
+                $('#referrer').val(referrer).css('color', 'grey');
+            }
+
+            function handleReferrerFocus() {
+                $('#referrer').css('color', 'black');
+            }
+
+            function handleClearUrl() {
+                $('#url').val('');
+                $('#referrer').val('');
+            }
+
+            // Helper Functions
+            function getUrlParent(fullUrl) {
+                try {
+                    var url = new URL(fullUrl);
+                    var baseUrl = url.origin;
+                    var path = url.pathname;
+                    if (path !== "" && !path.endsWith("/")) {
+                        path = path.substring(0, path.lastIndexOf("/") + 1);
+                    }
+                    return baseUrl + path;
+                } catch (e) {
+                    return "";
+                }
+            }
+
+            function formatSize(size) {
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                let unitIndex = 0;
+                while (size >= 1000 && unitIndex < units.length - 1) {
+                    size /= 1024;
+                    unitIndex++;
+                }
+                return `${size.toFixed(1)} ${units[unitIndex]}`;
+            }
+
+            function truncateUrl(url, maxLength = 100) {
+                if (url.length <= maxLength) {
+                    return url;
+                }
+                const origin = new URL(url).origin;
+                const truncatedPart = url.slice(-maxLength + origin.length + 15);
+                return `${origin}/......${truncatedPart}`;
+            }
+
+            // Api url
+            const apiUrl = getUrlParent(window.location.href) + 'Api';
+
+            // Request Functions
+            function refreshTable() {
+                hideError();
+                $.get(apiUrl, function (data) {
+                    $('#table-body').empty();
+                    data.forEach(function (item) {
+                        $('#table-body').append(
+                            `<tr>
+                                <td data-label="Datetime"><a target="_blank" href="./${item.dateTime}/${item.filename}">${item.dateTime}</a></td>
+                                <td data-label="Filename">${item.filename}</td>
+                                <td data-label="Size">${formatSize(item.size)}</td>
+                                <td data-label="Url" title="${item.url}">${truncateUrl(item.url)}</td>
+                                <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-datetime="${item.dateTime}" data-filename="${item.filename}">Delete</button></td>
+                            </tr>`
+                        );
+                    });
+                }).fail(function (jqXHR, textStatus, errorThrown) {
+                    showError(`Failed to refresh data: ${textStatus} - ${errorThrown}`);
+                });
+            }
+
+            function handleSubmit() {
+                hideError();
+                const url = $('#url').val();
+                const referrer = $('#referrer').val();
+                $.ajax({
+                    url: apiUrl,
+                    type: 'POST',
+                    data: JSON.stringify({ Url: url, Referrer: referrer }),
+                    contentType: 'application/json',
+                    success: function (response) {
+                        console.log(`Data submitted: ${url}`, response);
+                        refreshTable();
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        showError(`Failed to submit data: ${textStatus} - ${errorThrown}`);
+                    }
+                });
+            }
+
+            function handleDelete() {
+                const datetime = $(this).data('datetime');
+                const filename = $(this).data('filename');
+                if (confirm(`Are you sure you want to delete this item?\nDatetime: ${datetime}\nFilename: ${filename}`)) {
+                    $.ajax({
+                        url: `${apiUrl}?datetime=${datetime}`,
+                        type: 'DELETE',
+                        success: function (response) {
+                            console.log(`Data deleted: ${datetime}`, response);
+                            refreshTable();
+                        },
+                        error: function (jqXHR, textStatus, errorThrown) {
+                            showError(`Failed to delete data: ${textStatus} - ${errorThrown}`);
+                        }
+                    });
+                }
+            }
+
+            // Event Bindings
+            $(document).ready(function () {
+                $('#url').on('input', handleUrlInput);
+                $('#referrer').focus(handleReferrerFocus);
+                $('#submit').click(handleSubmit);
+                $('#refresh').click(refreshTable);
+                $('#clear-url').click(handleClearUrl);
+                $(document).on('click', '.delete-btn', handleDelete);
+
+                // Automatically refresh table on page load
+                refreshTable();
+            });
+        })();
+    </script>
+</body>
+</html>
