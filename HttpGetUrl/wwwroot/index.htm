@@ -12,10 +12,6 @@
             word-break: break-all;
         }
 
-        #referrer:focus {
-            color: black;
-        }
-
         .btn-sm {
             font-size: 0.85rem;
         }
@@ -61,7 +57,10 @@
         </div>
         <div class="mb-3">
             <label for="referrer" class="form-label">Referrer</label>
-            <input type="text" class="form-control" id="referrer" readonly>
+            <div class="input-group">
+                <input type="text" class="form-control" id="referrer">
+                <span class="input-group-text" id="clear-referrer">×</span>
+            </div>
         </div>
         <button id="submit" class="btn btn-primary">Submit</button>
         <button id="refresh" class="btn btn-secondary">Refresh</button>
@@ -87,27 +86,15 @@
     <script>
         (function () {
             // UI
-            function showError(message) {
-                $('#error-message').text(message).show();
-            }
-
-            function hideError() {
-                $('#error-message').hide();
-            }
-
+            function showError(message) { $('#error-message').text(message).show(); }
+            function hideError() { $('#error-message').hide(); }
+            function handleReferrerFocus() { $('#referrer').css('color', 'black'); }
+            function handleClearUrl() { $('#url').val(''); $('#referrer').val(''); }
+            function handleClearReferrer() { $('#referrer').val(''); }
             function handleUrlInput() {
                 const url = $('#url').val();
                 const referrer = getUrlParent(url);
                 $('#referrer').val(referrer).css('color', 'grey');
-            }
-
-            function handleReferrerFocus() {
-                $('#referrer').css('color', 'black');
-            }
-
-            function handleClearUrl() {
-                $('#url').val('');
-                $('#referrer').val('');
             }
 
             // Helper Functions
@@ -132,15 +119,15 @@
                     size /= 1024;
                     unitIndex++;
                 }
-                return `${size.toFixed(1)} ${units[unitIndex]}`;
+                return `${size.toFixed(Math.min(unitIndex, 1))}${units[unitIndex]}`;
             }
 
-            function truncateUrl(url, maxLength = 100) {
+            function truncateUrl(url, maxLength = 90) {
                 if (url.length <= maxLength) {
                     return url;
                 }
                 const origin = new URL(url).origin;
-                const truncatedPart = url.slice(-maxLength + origin.length + 15);
+                const truncatedPart = url.slice(-maxLength + origin.length + 9);
                 return `${origin}/......${truncatedPart}`;
             }
 
@@ -153,11 +140,14 @@
                 $.get(apiUrl, function (data) {
                     $('#table-body').empty();
                     data.forEach(function (item) {
+                        var isError = item.downloadedSize == -1;
+                        var isDone = !isError && item.size == item.downloadedSize;
+                        var inProgress = !isError && !isDone;
                         $('#table-body').append(
                             `<tr>
                                 <td data-label="Datetime"><a target="_blank" href="./${item.dateTime}/${item.filename}">${item.dateTime}</a></td>
-                                <td data-label="Filename">${item.filename}</td>
-                                <td data-label="Size">${formatSize(item.size)}</td>
+                                <td data-label="Filename">${item.filename} ${isError ? '❌' : ''}${isDone ? '✅' : ''}${inProgress ? '⏳' : ''}</td>
+                                <td data-label="Size">${inProgress ? (formatSize(item.downloadedSize) + ' / ') : ''} ${formatSize(item.size)}</td>
                                 <td data-label="Url" title="${item.url}">${truncateUrl(item.url)}</td>
                                 <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-datetime="${item.dateTime}" data-filename="${item.filename}">Delete</button></td>
                             </tr>`
@@ -212,6 +202,7 @@
                 $('#submit').click(handleSubmit);
                 $('#refresh').click(refreshTable);
                 $('#clear-url').click(handleClearUrl);
+                $('#clear-referrer').click(handleClearReferrer);
                 $(document).on('click', '.delete-btn', handleDelete);
 
                 // Automatically refresh table on page load

@@ -1,13 +1,14 @@
+# /etc/systemd/system
+
 [Unit]
-Description=hget
-  
+Description=Http Get Url to Local Disk
+
 [Service]
-Type=forking
 WorkingDirectory=/usr/local/etc/hget
 ExecStart=/usr/bin/dotnet /usr/local/etc/hget/HttpGetUrl.dll
 Restart=always
 RestartSec=3
-  
-[Install]   
+
+[Install]
 WantedBy=multi-user.target
 Alias=hget.service
