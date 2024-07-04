@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using Newtonsoft.Json;
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 namespace HttpGetUrl
@@ -126,6 +126,7 @@ namespace HttpGetUrl
                 {"video/x-ms-asf", "asf"},
                 {"x-world/x-vrml", "xof"},
             };
+            var cancellations = new ConcurrentDictionary<string, CancellationTokenSource>();
 
             var builder = WebApplication.CreateBuilder(args);
 
@@ -183,6 +184,9 @@ namespace HttpGetUrl
                 var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", item.DateTime);
                 Directory.CreateDirectory(folderPath);
 
+                var cancellationTokenSource = new CancellationTokenSource();
+                cancellations.TryAdd(item.DateTime, cancellationTokenSource);
+
                 var content = JsonConvert.SerializeObject(item);
                 var jsonPath = Path.Combine(folderPath, item.DateTime + ".json");
                 File.WriteAllTextAsync(jsonPath, content);
@@ -225,8 +229,9 @@ namespace HttpGetUrl
                                 var filePath = Path.Combine(folderPath, item.Filename);
                                 using (var fileStream = File.Create(filePath))
                                 {
-                                    await response.Content.CopyToAsync(fileStream);
+                                    await response.Content.CopyToAsync(fileStream, cancellationTokenSource.Token);
                                 }
+
                                 item.Size = item.DownloadedSize = new FileInfo(filePath).Length;
                                 await File.WriteAllTextAsync(jsonPath, JsonConvert.SerializeObject(item));
                             }
@@ -237,14 +242,23 @@ namespace HttpGetUrl
                         item.DownloadedSize = -1;
                         await File.WriteAllTextAsync(jsonPath, JsonConvert.SerializeObject(item));
                     }
+                    finally
+                    {
+                        cancellations.TryRemove(item.DateTime, out _);
+                    }
                 }).ConfigureAwait(false);
 
                 return Results.Ok();
             });
-            app.MapDelete("/Api", (string datetime) =>
+            app.MapDelete("/Api", async (string datetime) =>
             {
                 try
                 {
+                    if (cancellations.TryGetValue(datetime, out var cancellationTokenSource))
+                        await cancellationTokenSource.CancelAsync();
+                    while (cancellations.ContainsKey(datetime))
+                        await Task.Delay(10);
+
                     var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", datetime);
                     if (Directory.Exists(folderPath))
                         Directory.Delete(folderPath, true);
