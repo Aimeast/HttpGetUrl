@@ -146,9 +146,9 @@
                         $('#table-body').append(
                             `<tr>
                                 <td data-label="Datetime"><a target="_blank" href="./${item.dateTime}/${item.filename}">${item.dateTime}</a></td>
-                                <td data-label="Filename">${item.filename} ${isError ? '❌' : ''}${isDone ? '✅' : ''}${inProgress ? '⏳' : ''}</td>
+                                <td data-label="Filename">${item.filename} ${isError ? '\u274C' : ''}${isDone ? '\u2705' : ''}${inProgress ? '\u23f3' : ''}</td>
                                 <td data-label="Size">${inProgress ? (formatSize(item.downloadedSize) + ' / ') : ''} ${formatSize(item.size)}</td>
-                                <td data-label="Url" title="${item.url}">${truncateUrl(item.url)}</td>
+                                <td data-label="Url" title="${item.url}"><a target="_blank" href="${item.url}">${truncateUrl(item.url)}</a></td>
                                 <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-datetime="${item.dateTime}" data-filename="${item.filename}">Delete</button></td>
                             </tr>`
                         );
