@@ -47,7 +47,7 @@ namespace HttpGetUrl
                 {"application/javascript", "js"},
                 {"application/json", "json"},
                 {"application/msword", "doc,dot"},
-                {"application/octet-stream", "bin,exe,com"},
+                //{"application/octet-stream", "bin,exe,com"}, // // already fallback
                 {"application/pdf", "pdf"},
                 {"application/pkcs7-mime", "p7m,p7c,p7z"},
                 {"application/pkcs7-signature", "p7s"},
@@ -214,13 +214,17 @@ namespace HttpGetUrl
                                     {
                                         item.Filename = "default";
                                     }
+                                    var ext = Path.GetExtension(item.Filename);
                                     var mediaType = response.Content.Headers.ContentType?.MediaType;
-                                    if (mediaType != null && mimes.TryGetValue(mediaType, out var ext))
-                                        ext = "." + ext.Split(',')[0];
-                                    else
-                                        ext = ".bin";
-                                    if (!item.Filename.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
-                                        item.Filename += ext;
+                                    if (mediaType != "application/octet-stream" || string.IsNullOrEmpty(ext))
+                                    {
+                                        if (mediaType != null && mimes.TryGetValue(mediaType, out ext))
+                                            ext = "." + ext.Split(',')[0];
+                                        else
+                                            ext = ".bin";
+                                        if (!item.Filename.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                                            item.Filename += ext;
+                                    }
                                 }
 
                                 item.Size = response.Content.Headers.ContentLength ?? -1;
