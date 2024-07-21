@@ -131,6 +131,38 @@
                 return `${origin}/......${truncatedPart}`;
             }
 
+            function truncateText(text, maxLength = 70) {
+                if (text.length <= maxLength) {
+                    return text;
+                }
+                const firstPart = text.slice(0, maxLength / 2 - 4);
+                const truncatedPart = text.slice(-maxLength / 2 + 4);
+                return `${firstPart}/......${truncatedPart}`;
+            }
+
+            function calcSizeText(item) {
+                const showEstimated = item.estimatedLength >= 0;
+                const showDownloaded = item.status != 3 || !showEstimated;
+                var result = '';
+                if (showDownloaded)
+                    result += formatSize(item.downloadedLength);
+                if (showDownloaded && showEstimated)
+                    result += ' / ';
+                if (showEstimated)
+                    result += formatSize(item.estimatedLength);
+                return result;
+            }
+
+            function mapStatusToEmoji(status) {
+                switch (status) {
+                    case 0: return '\ud83d\udd52'; // Pending
+                    case 1: return '\u23f3';       // Downloading
+                    case 2: return '\ud83d\udee0'; // Merging
+                    case 3: return '\u2705';       // Completed
+                    default: return '\u274c';      // Error -1
+                }
+            }
+
             // Api url
             const apiUrl = getUrlParent(window.location.href) + 'Api';
 
@@ -140,14 +172,11 @@
                 $.get(apiUrl, function (data) {
                     $('#table-body').empty();
                     data.forEach(function (item) {
-                        var isError = item.downloadedSize == -1;
-                        var isDone = !isError && item.size == item.downloadedSize;
-                        var inProgress = !isError && !isDone;
                         $('#table-body').append(
                             `<tr>
-                                <td data-label="Datetime"><a target="_blank" href="./${item.dateTime}/${item.filename}">${item.dateTime}</a></td>
-                                <td data-label="Filename">${item.filename} ${isError ? '\u274C' : ''}${isDone ? '\u2705' : ''}${inProgress ? '\u23f3' : ''}</td>
-                                <td data-label="Size">${inProgress ? (formatSize(item.downloadedSize) + ' / ') : ''} ${formatSize(item.size)}</td>
+                                <td data-label="Datetime">${item.dateTime}</td>
+                                <td data-label="Filename"><a target="_blank" href="./${item.dateTime}/${item.filename}">${item.filename}</a> ${mapStatusToEmoji(item.status)}</td>
+                                <td data-label="Size">${calcSizeText(item)}</td>
                                 <td data-label="Url" title="${item.url}"><a target="_blank" href="${item.url}">${truncateUrl(item.url)}</a></td>
                                 <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-datetime="${item.dateTime}" data-filename="${item.filename}">Delete</button></td>
                             </tr>`
