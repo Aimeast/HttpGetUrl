@@ -2,13 +2,13 @@
 
 namespace HttpGetUrl;
 
-public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider workingFolder) : IDisposable
+public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource) : IDisposable
 {
-    protected readonly Uri uri = uri;
-    protected readonly Uri referrer = referrer;
+    protected Uri uri = uri;
+    protected Uri referrer = referrer;
     public IFileProvider WorkingFolder { get; } = workingFolder;
 
-    public CancellationTokenSource CancellationTokenSource { get; } = new();
+    public CancellationTokenSource CancellationTokenSource { get; } = cancellationTokenSource ?? new();
     public string FinalFileName { get; protected set; } = string.Empty;
     public string[] FragmentFileNames { get; protected set; } = [];
     public long EstimatedContentLength { get; protected set; }
@@ -18,14 +18,16 @@ public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider wor
     public abstract Task<bool> Merge();
     public abstract void Dispose();
 
-    public static ContentDownloader Create(Uri uri, Uri referrer, IFileProvider workingFolder)
+    public static ContentDownloader Create(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource = null)
     {
         switch (uri.Host)
         {
             case "x.com":
+            case "t.co":
+                return new TwitterDownloader(uri, referrer, workingFolder, cancellationTokenSource);
             case "youtu.be":
             default:
-                return new HttpDownloader(uri, referrer, workingFolder);
+                return new HttpDownloader(uri, referrer, workingFolder, cancellationTokenSource);
         }
     }
 }

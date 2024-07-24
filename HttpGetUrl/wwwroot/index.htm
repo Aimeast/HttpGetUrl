@@ -155,11 +155,12 @@
 
             function mapStatusToEmoji(status) {
                 switch (status) {
-                    case 0: return '\ud83d\udd52'; // Pending
-                    case 1: return '\u23f3';       // Downloading
-                    case 2: return '\ud83d\udee0'; // Merging
-                    case 3: return '\u2705';       // Completed
-                    default: return '\u274c';      // Error -1
+                    case 0: return '\ud83d\udd52';      // Pending
+                    case 1: return '\ud83d\udd75\u2753';// NotFound
+                    case 2: return '\u23f3';            // Downloading
+                    case 3: return '\ud83d\udee0';      // Merging
+                    case 4: return '\u2705';            // Completed
+                    default: return '\u274c';           // Error -1
                 }
             }
 
@@ -175,7 +176,7 @@
                         $('#table-body').append(
                             `<tr>
                                 <td data-label="Datetime">${item.dateTime}</td>
-                                <td data-label="Filename"><a target="_blank" href="./${item.dateTime}/${item.filename}">${item.filename}</a> ${mapStatusToEmoji(item.status)}</td>
+                                <td data-label="Filename"><a target="_blank" href="./pw-${item.dateTime}/${item.filename}">${item.filename}</a> ${mapStatusToEmoji(item.status)}</td>
                                 <td data-label="Size">${calcSizeText(item)}</td>
                                 <td data-label="Url" title="${item.url}"><a target="_blank" href="${item.url}">${truncateUrl(item.url)}</a></td>
                                 <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-datetime="${item.dateTime}" data-filename="${item.filename}">Delete</button></td>

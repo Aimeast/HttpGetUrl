@@ -2,7 +2,8 @@
 
 namespace HttpGetUrl;
 
-public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder) : ContentDownloader(uri, referrer, workingFolder)
+public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
+    : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
 {
     private readonly Dictionary<string, string> mimes = new(StringComparer.OrdinalIgnoreCase)
     {

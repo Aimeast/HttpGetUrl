@@ -24,11 +24,17 @@ namespace HttpGetUrl
             options.StaticFileOptions.DefaultContentType = "application/octet-stream";
             app.UseFileServer(options);
 
+            PwService.InitService(new PwOptions
+            {
+                UserDataDir = Path.Combine(builder.Environment.ContentRootPath, ".pwData"),
+                Proxy = builder.Configuration["HttpGetUrl:Proxy"],
+            });
+
             app.MapGet("/Api", () =>
             {
                 var selector = builder.Environment.ContentRootFileProvider
                 .GetDirectoryContents("wwwroot")
-                .Where(x => x.IsDirectory && Regex.IsMatch(x.Name, @"^\d{8}-\d{6}$"))
+                .Where(x => x.IsDirectory && Regex.IsMatch(x.Name, @"^pw-\d{8}-\d{6}$"))
                 .Select(x =>
                 {
                     var item = default(TaskItem);
@@ -82,7 +88,7 @@ namespace HttpGetUrl
                 item.DateTime = DateTime.Now.ToString("yyyyMMdd-HHmmss");
                 item.Filename = "";
                 item.EstimatedLength = -1;
-                var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", item.DateTime);
+                var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"pw-{item.DateTime}");
                 Directory.CreateDirectory(folderPath);
 
                 var downloader = ContentDownloader.Create(item.Url, item.Referrer, new PhysicalFileProvider(folderPath));
@@ -95,11 +101,22 @@ namespace HttpGetUrl
                     using (downloader)
                         try
                         {
-                            await downloader.Analysis();
-                            item.Filename = downloader.FinalFileName;
-                            item.EstimatedLength = downloader.EstimatedContentLength;
                             item.Status = DownloadStatus.Downloading;
                             await SaveTaskToJson(downloader.WorkingFolder, item);
+
+                            await downloader.Analysis();
+                            if (string.IsNullOrEmpty(downloader.FinalFileName))
+                            {
+                                item.Status = DownloadStatus.NotFound;
+                                await SaveTaskToJson(downloader.WorkingFolder, item);
+                                return;
+                            }
+                            else
+                            {
+                                item.Filename = downloader.FinalFileName;
+                                item.EstimatedLength = downloader.EstimatedContentLength;
+                                await SaveTaskToJson(downloader.WorkingFolder, item);
+                            }
 
                             item.DownloadedLength = await downloader.Download();
                             item.Status = downloader.FragmentFileNames.Length == 0 ? DownloadStatus.Completed : DownloadStatus.Merging;
@@ -112,7 +129,7 @@ namespace HttpGetUrl
                                 await SaveTaskToJson(downloader.WorkingFolder, item);
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
                             item.Status = DownloadStatus.Error;
                             await SaveTaskToJson(downloader.WorkingFolder, item);
@@ -134,7 +151,7 @@ namespace HttpGetUrl
                     while (downloaders.ContainsKey(datetime))
                         await Task.Delay(10);
 
-                    var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", datetime);
+                    var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"pw-{datetime}");
                     if (Directory.Exists(folderPath))
                         Directory.Delete(folderPath, true);
 
@@ -145,13 +162,20 @@ namespace HttpGetUrl
                     return Results.BadRequest(ex.Message);
                 }
             });
+            app.MapGet("/Api/TwitterToken", async (string token) =>
+            {
+                await TwitterDownloader.SetToken(token);
+                return Results.Ok();
+            });
 
             app.Run();
+
+            PwService.Close();
         }
 
         private static async Task SaveTaskToJson(IFileProvider fileProvider, TaskItem item)
         {
-            var jsonPath = fileProvider.GetFileInfo(item.DateTime + ".json").PhysicalPath;
+            var jsonPath = fileProvider.GetFileInfo($"pw-{item.DateTime}.json").PhysicalPath;
             var content = JsonSerializer.Serialize(item);
             await File.WriteAllTextAsync(jsonPath, content);
         }
@@ -171,9 +195,10 @@ namespace HttpGetUrl
         {
             Error = -1,
             Pending = 0,
-            Downloading = 1,
-            Merging = 2,
-            Completed = 3,
+            NotFound = 1,
+            Downloading = 2,
+            Merging = 3,
+            Completed = 4,
         }
     }
 }
