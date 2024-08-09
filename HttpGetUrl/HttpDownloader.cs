@@ -163,14 +163,14 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
                     filename += ext;
             }
         }
-        if (string.IsNullOrEmpty(FinalFileName))
-            FinalFileName = filename;
+        if (FinalFileNames.Length == 0)
+            FinalFileNames = [filename];
         EstimatedContentLength = httpResponseMessage.Content.Headers.ContentLength ?? -1;
     }
 
     public override async Task<long> Download()
     {
-        var filePath = WorkingFolder.GetFileInfo(FinalFileName).PhysicalPath;
+        var filePath = WorkingFolder.GetFileInfo(FinalFileNames[0]).PhysicalPath;
         using (var fileStream = File.Create(filePath))
         {
             await httpResponseMessage.Content.CopyToAsync(fileStream, CancellationTokenSource.Token);

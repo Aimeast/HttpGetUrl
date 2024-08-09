@@ -2,13 +2,14 @@
 using Microsoft.Playwright;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace HttpGetUrl;
 
 public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
     : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
 {
-    ContentDownloader backDownloader = null;
+    ContentDownloader[] backDownloaders = null;
 
     public override async Task Analysis()
     {
@@ -28,11 +29,16 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
                 var responseBody = await response.TextAsync();
                 var doc = JsonDocument.Parse(responseBody);
 
-                var urlNode = doc.RootElement.SearchJson("extended_entities").SearchJson("variants").SearchJson("url").LastOrDefault();
-                if (urlNode.ValueKind == JsonValueKind.String)
+                var urlNodes = doc.RootElement.SearchJson("extended_entities").SearchJson("variants").Select(x => x.SearchJson("url").LastOrDefault()).ToArray();
+                backDownloaders = new ContentDownloader[urlNodes.Length];
+                for (var i = 0; i < urlNodes.Length; i++)
                 {
-                    var videoUrl = urlNode.ToString();
-                    backDownloader = Create(new Uri(videoUrl), null, workingFolder, CancellationTokenSource);
+                    var node = urlNodes[i];
+                    if (node.ValueKind == JsonValueKind.String)
+                    {
+                        var videoUrl = node.ToString();
+                        backDownloaders[i] = Create(new Uri(videoUrl), null, workingFolder, CancellationTokenSource);
+                    }
                 }
                 tcs.SetResult();
             }
@@ -45,17 +51,20 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
         await tcs.Task;
         await page.CloseAsync();
 
-        if (backDownloader != null)
+        FinalFileNames = new string[backDownloaders.Length];
+        for (var i = 0; i < backDownloaders.Length; i++)
         {
-            await backDownloader.Analysis();
-            FinalFileName = backDownloader.FinalFileName;
-            EstimatedContentLength = backDownloader.EstimatedContentLength;
+            var downloader = backDownloaders[i];
+            await downloader.Analysis();
+            FinalFileNames[i] = downloader.FinalFileNames[0];
+            EstimatedContentLength += downloader.EstimatedContentLength;
         }
     }
 
-    public override Task<long> Download()
+    public override async Task<long> Download()
     {
-        return backDownloader.Download();
+        var lengths = await Task.WhenAll(backDownloaders.Select(x => x.Download()));
+        return lengths.Sum();
     }
 
     public override Task Merge()
@@ -65,8 +74,14 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
 
     public override void Dispose()
     {
-        backDownloader?.Dispose();
-        backDownloader = null;
+        if (backDownloaders != null)
+        {
+            foreach (var downloader in backDownloaders)
+            {
+                downloader.Dispose();
+            }
+        }
+        backDownloaders = null;
     }
 
     public static async Task SetToken(string token)

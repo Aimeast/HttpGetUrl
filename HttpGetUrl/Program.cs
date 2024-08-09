@@ -62,20 +62,12 @@ namespace HttpGetUrl
                         }
                         else
                         {
-                            var info = provider.GetFileInfo(item.Filename);
-                            if (downloader.FragmentFileNames.Length == 0 || info.Exists)
-                            {   // Single file download OR already merged
-                                item.DownloadedLength = info.Length;
-                            }
-                            else
-                            {   // Fragmented downloading
-                                item.DownloadedLength = 0;
-                                foreach (var fragment in downloader.FragmentFileNames)
-                                {
-                                    var fragInfo = provider.GetFileInfo(fragment);
-                                    if (fragInfo.Exists)
-                                        item.DownloadedLength += fragInfo.Length;
-                                }
+                            item.DownloadedLength = 0;
+                            foreach (var filename in downloader.FinalFileNames.Concat(downloader.FragmentFileNames))
+                            {
+                                var info = provider.GetFileInfo(filename);
+                                if (info.Exists)
+                                    item.DownloadedLength += info.Length;
                             }
                         }
                     }
@@ -91,7 +83,7 @@ namespace HttpGetUrl
                     return Results.BadRequest($"Only supported {string.Join('/', supportedProtocol)}.");
 
                 item.DateTime = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                item.Filename = "";
+                item.Filenames = [];
                 item.EstimatedLength = -1;
                 var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"pw-{item.DateTime}");
                 Directory.CreateDirectory(folderPath);
@@ -110,7 +102,7 @@ namespace HttpGetUrl
                             await SaveTaskToJson(downloader.WorkingFolder, item);
 
                             await downloader.Analysis();
-                            if (string.IsNullOrEmpty(downloader.FinalFileName))
+                            if (downloader.FinalFileNames.Length == 0)
                             {
                                 item.Status = DownloadStatus.NotFound;
                                 await SaveTaskToJson(downloader.WorkingFolder, item);
@@ -118,7 +110,7 @@ namespace HttpGetUrl
                             }
                             else
                             {
-                                item.Filename = downloader.FinalFileName;
+                                item.Filenames = downloader.FinalFileNames;
                                 item.EstimatedLength = downloader.EstimatedContentLength;
                                 await SaveTaskToJson(downloader.WorkingFolder, item);
                             }
@@ -198,7 +190,7 @@ namespace HttpGetUrl
             public string DateTime { get; set; }
             public Uri Url { get; set; }
             public Uri Referrer { get; set; }
-            public string Filename { get; set; }
+            public string[] Filenames { get; set; }
             public long EstimatedLength { get; set; } // -1 means unknow length.
             public long DownloadedLength { get; set; }
             public DownloadStatus Status { get; set; }

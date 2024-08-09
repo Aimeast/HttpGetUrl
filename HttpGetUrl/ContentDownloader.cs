@@ -10,7 +10,7 @@ public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider wor
     public IFileProvider WorkingFolder { get; } = workingFolder;
 
     public CancellationTokenSource CancellationTokenSource { get; } = cancellationTokenSource ?? new();
-    public string FinalFileName { get; internal set; } = string.Empty;
+    public string[] FinalFileNames { get; internal set; } = [];
     public string[] FragmentFileNames { get; protected set; } = [];
     public long EstimatedContentLength { get; protected set; }
 

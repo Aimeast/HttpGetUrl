@@ -1,6 +1,5 @@
 ﻿using FFMpegCore;
 using Microsoft.Extensions.FileProviders;
-using System.Collections.ObjectModel;
 using System.Net;
 using YoutubeExplode;
 using YoutubeExplode.Videos.Streams;
@@ -49,12 +48,14 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
         {
             var d1 = Create(new Uri(videoInfo.Url), null, workingFolder, CancellationTokenSource);
             var d2 = Create(new Uri(audioInfo.Url), null, workingFolder, CancellationTokenSource);
-            d1.FinalFileName = $"video.{videoInfo.Container.Name}";
-            d2.FinalFileName = $"audio.{videoInfo.Container.Name}";
+            var n1 = $"video.{videoInfo.Container.Name}";
+            var n2 = $"audio.{videoInfo.Container.Name}";
+            d1.FinalFileNames = [n1];
+            d2.FinalFileNames = [n2];
             backDownloaders = [d1, d2];
-            FragmentFileNames = [d1.FinalFileName, d2.FinalFileName];
+            FragmentFileNames = [n1, n2];
         }
-        FinalFileName = $"{MakeValidFileName(video.Title)}.{videoInfo.Container.Name}";
+        FinalFileNames = [$"{MakeValidFileName(video.Title)}.{videoInfo.Container.Name}"];
         foreach (var downloader in backDownloaders)
         {
             await downloader.Analysis();
@@ -73,9 +74,9 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
         if (backDownloaders.Length == 1)
             return;
 
-        string videoFilePath = WorkingFolder.GetFileInfo(backDownloaders[0].FinalFileName).PhysicalPath;
-        string audioFilePath = WorkingFolder.GetFileInfo(backDownloaders[1].FinalFileName).PhysicalPath;
-        string outputFilePath = WorkingFolder.GetFileInfo(FinalFileName).PhysicalPath;
+        string videoFilePath = WorkingFolder.GetFileInfo(backDownloaders[0].FinalFileNames[0]).PhysicalPath;
+        string audioFilePath = WorkingFolder.GetFileInfo(backDownloaders[1].FinalFileNames[0]).PhysicalPath;
+        string outputFilePath = WorkingFolder.GetFileInfo(FinalFileNames[0]).PhysicalPath;
 
         var result = await FFMpegArguments
             .FromFileInput(videoFilePath)
@@ -84,11 +85,21 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
                 .WithVideoCodec("copy")
                 .WithAudioCodec("copy"))
             .ProcessAsynchronously();
+
+        File.Delete(videoFilePath);
+        File.Delete(audioFilePath);
     }
 
     public override void Dispose()
     {
-        throw new NotImplementedException();
+        if (backDownloaders != null)
+        {
+            foreach (var downloader in backDownloaders)
+            {
+                downloader.Dispose();
+            }
+        }
+        backDownloaders = null;
     }
 
     private static string MakeValidFileName(string fileName, char replacement = '_')
