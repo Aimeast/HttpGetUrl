@@ -141,7 +141,7 @@
             }
 
             function calcSizeText(item) {
-                const showEstimated = item.estimatedLength >= 0;
+                const showEstimated = item.estimatedLength >= 0 && item.status == 2;
                 const showDownloaded = item.status != 3 || !showEstimated;
                 var result = '';
                 if (showDownloaded)
@@ -176,7 +176,7 @@
                         $('#table-body').append(
                             `<tr>
                                 <td data-label="Datetime">${item.dateTime}</td>
-                                <td data-label="Filename"><a target="_blank" href="./pw-${item.dateTime}/${item.filename}">${item.filename}</a> ${mapStatusToEmoji(item.status)}</td>
+                                <td data-label="Filename"><a target="_blank" href="./pw-${item.dateTime}/${item.filename}">${item.filename}</a> ${mapStatusToEmoji(item.status)} ${item.errorMessage ?? ''}</td>
                                 <td data-label="Size">${calcSizeText(item)}</td>
                                 <td data-label="Url" title="${item.url}"><a target="_blank" href="${item.url}">${truncateUrl(item.url)}</a></td>
                                 <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-datetime="${item.dateTime}" data-filename="${item.filename}">Delete</button></td>

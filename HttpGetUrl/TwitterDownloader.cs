@@ -16,6 +16,13 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
         var page = await PwService.GetInstance().NewPageAsync();
         page.Response += async (_, response) =>
         {
+            if (CancellationTokenSource.IsCancellationRequested)
+            {
+                tcs.SetCanceled();
+                await page.CloseAsync();
+                CancellationTokenSource.Token.ThrowIfCancellationRequested();
+            }
+
             if (Regex.IsMatch(response.Url, @"/graphql/.+/(TweetResultByRestId|TweetDetail)"))
             {
                 var responseBody = await response.TextAsync();
@@ -51,7 +58,7 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
         return backDownloader.Download();
     }
 
-    public override Task<bool> Merge()
+    public override Task Merge()
     {
         throw new InvalidOperationException($"Merge not supported by {nameof(TwitterDownloader)}.");
     }

@@ -24,10 +24,13 @@ namespace HttpGetUrl
             options.StaticFileOptions.DefaultContentType = "application/octet-stream";
             app.UseFileServer(options);
 
-            PwService.InitService(new PwOptions
+            var tokenFileInfo = builder.Environment.ContentRootFileProvider.GetFileInfo("tokens.json");
+            var tokens = Token.GetTokens(tokenFileInfo);
+            ContentDownloader.InitService(new PwOptions
             {
                 UserDataDir = Path.Combine(builder.Environment.ContentRootPath, ".pwData"),
                 Proxy = builder.Configuration["HttpGetUrl:Proxy"],
+                Tokens = tokens,
             });
 
             app.MapGet("/Api", () =>
@@ -57,20 +60,22 @@ namespace HttpGetUrl
                         {
                             item.Status = DownloadStatus.Error;
                         }
-                        else if (downloader.FragmentFileNames.Length == 0)
-                        {   // Single file download
-                            var info = provider.GetFileInfo(item.Filename);
-                            if (info.Exists)
-                                item.DownloadedLength = info.Length;
-                        }
                         else
-                        {   // Fragmented download
-                            item.DownloadedLength = 0;
-                            foreach (var fragment in downloader.FragmentFileNames)
-                            {
-                                var info = provider.GetFileInfo(fragment);
-                                if (info.Exists)
-                                    item.DownloadedLength += info.Length;
+                        {
+                            var info = provider.GetFileInfo(item.Filename);
+                            if (downloader.FragmentFileNames.Length == 0 || info.Exists)
+                            {   // Single file download OR already merged
+                                item.DownloadedLength = info.Length;
+                            }
+                            else
+                            {   // Fragmented downloading
+                                item.DownloadedLength = 0;
+                                foreach (var fragment in downloader.FragmentFileNames)
+                                {
+                                    var fragInfo = provider.GetFileInfo(fragment);
+                                    if (fragInfo.Exists)
+                                        item.DownloadedLength += fragInfo.Length;
+                                }
                             }
                         }
                     }
@@ -132,6 +137,7 @@ namespace HttpGetUrl
                         catch (Exception ex)
                         {
                             item.Status = DownloadStatus.Error;
+                            item.ErrorMessage = $"{ex.GetType().Name}: {ex.Message}";
                             await SaveTaskToJson(downloader.WorkingFolder, item);
                         }
                         finally
@@ -162,9 +168,16 @@ namespace HttpGetUrl
                     return Results.BadRequest(ex.Message);
                 }
             });
-            app.MapGet("/Api/TwitterToken", async (string token) =>
+            app.MapGet("/Api/Tokens", () =>
             {
-                await TwitterDownloader.SetToken(token);
+                var tokens = Token.GetTokens(tokenFileInfo);
+                return tokens;
+            });
+            app.MapPost("/Api/Tokens", async (Token[] tokens) =>
+            {
+                ContentDownloader.PwOptions.Tokens = tokens;
+                await Token.SaveTokensAsync(tokenFileInfo, tokens);
+                await TwitterDownloader.SetToken(tokens.First(x => x.Identity == "Twitter").Value);
                 return Results.Ok();
             });
 
@@ -189,6 +202,7 @@ namespace HttpGetUrl
             public long EstimatedLength { get; set; } // -1 means unknow length.
             public long DownloadedLength { get; set; }
             public DownloadStatus Status { get; set; }
+            public string ErrorMessage { get; set; }
         }
 
         private enum DownloadStatus

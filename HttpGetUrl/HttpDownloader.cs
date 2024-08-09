@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.FileProviders;
+using System.Net;
 
 namespace HttpGetUrl;
 
@@ -132,7 +133,10 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
         if (httpClient != null || httpResponseMessage != null)
             throw new InvalidOperationException("Analysis has been called.");
 
-        httpClient = new HttpClient();
+        var handler = new HttpClientHandler();
+        if (PwOptions.Proxy != null)
+            handler.Proxy = new WebProxy(PwOptions.Proxy);
+        httpClient = new HttpClient(handler);
         if (referrer != null)
             httpClient.DefaultRequestHeaders.Referrer = referrer;
 
@@ -159,7 +163,8 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
                     filename += ext;
             }
         }
-        FinalFileName = filename;
+        if (string.IsNullOrEmpty(FinalFileName))
+            FinalFileName = filename;
         EstimatedContentLength = httpResponseMessage.Content.Headers.ContentLength ?? -1;
     }
 
@@ -173,7 +178,7 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
         }
     }
 
-    public override Task<bool> Merge()
+    public override Task Merge()
     {
         throw new InvalidOperationException($"Merge not supported by {nameof(HttpDownloader)}.");
     }
