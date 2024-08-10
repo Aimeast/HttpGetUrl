@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.FileProviders;
-using System.Net;
 
 namespace HttpGetUrl;
 
