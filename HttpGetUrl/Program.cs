@@ -33,7 +33,7 @@ public class Program
             Tokens = tokens,
         });
 
-        app.MapGet("/Api", () =>
+        app.MapGet("/task", () =>
         {
             var selector = builder.Environment.ContentRootFileProvider
             .GetDirectoryContents("wwwroot")
@@ -77,13 +77,13 @@ public class Program
             .OrderByDescending(x => x.DateTime);
             return selector;
         });
-        app.MapPost("/Api", async (TaskItem item) =>
+        app.MapPost("/task", async (TaskItem item) =>
         {
             if (!supportedProtocol.Contains(item.Url.Scheme))
                 return Results.BadRequest($"Only supported {string.Join('/', supportedProtocol)}.");
 
             item.DateTime = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            item.Filenames = [];
+            item.Files = [];
             item.EstimatedLength = -1;
             var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"pw-{item.DateTime}");
             Directory.CreateDirectory(folderPath);
@@ -110,7 +110,7 @@ public class Program
                         }
                         else
                         {
-                            item.Filenames = downloader.FinalFileNames;
+                            item.Files = downloader.FinalFileNames;
                             item.EstimatedLength = downloader.EstimatedContentLength;
                             await SaveTaskToJson(downloader.WorkingFolder, item);
                         }
@@ -140,7 +140,7 @@ public class Program
 
             return Results.Ok();
         });
-        app.MapDelete("/Api", async (string datetime) =>
+        app.MapDelete("/task", async (string datetime) =>
         {
             try
             {
@@ -160,12 +160,12 @@ public class Program
                 return Results.BadRequest(ex.Message);
             }
         });
-        app.MapGet("/Api/Tokens", () =>
+        app.MapGet("/tokens", () =>
         {
             var tokens = Token.GetTokens(tokenFileInfo);
             return tokens;
         });
-        app.MapPost("/Api/Tokens", async (Token[] tokens) =>
+        app.MapPost("/tokens", async (Token[] tokens) =>
         {
             ContentDownloader.PwOptions.Tokens = tokens;
             await Token.SaveTokensAsync(tokenFileInfo, tokens);
@@ -190,7 +190,7 @@ public class Program
         public string DateTime { get; set; }
         public Uri Url { get; set; }
         public Uri Referrer { get; set; }
-        public string[] Filenames { get; set; }
+        public string[] Files { get; set; }
         public long EstimatedLength { get; set; } // -1 means unknow length.
         public long DownloadedLength { get; set; }
         public DownloadStatus Status { get; set; }

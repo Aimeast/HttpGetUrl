@@ -47,7 +47,7 @@
                     <th>Identity</th>
                     <th>Key</th>
                     <th>Value</th>
-                    <th>Actions</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody id="tokenTableBody">
@@ -60,14 +60,8 @@
     </div>
 
     <script>
-        $(document).ready(function () {
-            // Automatically refresh data
-            refreshData();
-
-            $('#refresh').click(function () { refreshData(); });
-            $('#submit').click(function () { submitData(); });
-            $('#addRow').click(function () { addRow(); });
-
+        (function () {
+            // UI
             function showStatusMessage(message, type) {
                 $('#statusMessage').removeClass('alert-success alert-danger').addClass('alert-' + type).text(message).show();
             }
@@ -76,23 +70,66 @@
                 $('#statusMessage').hide().text('');
             }
 
+            function addRow() {
+                clearStatusMessage();
+                $('#tokenTableBody').append(`
+                    <tr>
+                        <td data-label="Identity"><input type="text" class="form-control"></td>
+                        <td data-label="Key"><input type="text" class="form-control"></td>
+                        <td data-label="Value"><input type="text" class="form-control rowValue"></td>
+                        <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
+                    </tr>
+                `);
+                attachRowEvent();
+            }
+
+            function attachRowEvent() {
+                $('.deleteRow').off('click').on('click', function () {
+                    var tr = $(this).closest('tr');
+                    tr.find('td').each(function () { $(this).find('input,span').css('text-decoration', 'line-through'); });
+                    // Mark row as deleted by adding a data attribute
+                    tr.data('deleted', 'true');
+                    tr.find('input,button').attr('disabled', true);
+                });
+                $('.rowValue').off('focus').on('focus', function () { this.select(); });
+            }
+
+            // Helper Functions
+            function getUrlParent(fullUrl) {
+                try {
+                    var url = new URL(fullUrl);
+                    var baseUrl = url.origin;
+                    var path = url.pathname;
+                    if (path !== "" && !path.endsWith("/")) {
+                        path = path.substring(0, path.lastIndexOf("/") + 1);
+                    }
+                    return baseUrl + path;
+                } catch (e) {
+                    return "";
+                }
+            }
+
+            // Api url
+            const apiUrl = getUrlParent(window.location.href) + 'tokens';
+
+            // Request Functions
             function refreshData() {
                 clearStatusMessage();
-                $.get('/Api/Tokens', function (data) {
+                $.get(apiUrl, function (data) {
                     $('#tokenTableBody').empty();
                     data.forEach(function (token) {
                         $('#tokenTableBody').append(`
                             <tr>
                                 <td data-label="Identity"><span>${token.identity}</span></td>
                                 <td data-label="Key"><span>${token.key}</span></td>
-                                <td data-label="Value"><input type="text" class="form-control" value="${token.value}"></td>
+                                <td data-label="Value"><input type="text" class="form-control rowValue" value="${token.value}"></td>
                                 <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                             </tr>
                         `);
                     });
-                    attachDeleteEvent();
+                    attachRowEvent();
                 }).fail(function (xhr, status, error) {
-                    showStatusMessage('Error refreshing data: ' + error, 'danger');
+                    showStatusMessage('Refresh data error: ' + error, 'danger');
                 });
             }
 
@@ -100,72 +137,42 @@
                 clearStatusMessage();
                 var data = [];
                 $('#tokenTableBody tr').each(function () {
-                    var identity = $(this).find('span').eq(0).text();
-                    var key = $(this).find('span').eq(1).text();
-                    var value = $(this).find('input').eq(0).val();
+                    if ($(this).data('deleted'))
+                        return;
+                    if ($(this).find('span').length > 0) {
+                        identity = $(this).find('span').eq(0).text();
+                        key = $(this).find('span').eq(1).text();
+                    } else {
+                        identity = $(this).find('input').eq(0).val();
+                        key = $(this).find('input').eq(1).val();
+                    }
+                    value = $(this).find('input').last().val();
                     data.push({ identity: identity, key: key, value: value });
                 });
                 $.ajax({
-                    url: '/Api/Tokens',
+                    url: apiUrl,
                     type: 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(data),
                     success: function (response) {
                         refreshData();
-                        showStatusMessage('Data submitted successfully', 'success');
+                        showStatusMessage(`Submit data successfully`, 'success');
                     },
                     error: function (xhr, status, error) {
-                        showStatusMessage('Error submitting data: ' + error, 'danger');
+                        showStatusMessage(`Submit data error: ` + error, 'danger');
                     }
                 });
             }
 
-            function addRow() {
-                clearStatusMessage();
-                $('#tokenTableBody').append(`
-                    <tr>
-                        <td data-label="Identity"><input type="text" class="form-control"></td>
-                        <td data-label="Key"><input type="text" class="form-control"></td>
-                        <td data-label="Value"><input type="text" class="form-control"></td>
-                        <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
-                    </tr>
-                `);
-                attachDeleteEvent();
-            }
+            $(document).ready(function () {
+                $('#refresh').click(refreshData);
+                $('#submit').click(submitData);
+                $('#addRow').click(addRow);
 
-            function attachDeleteEvent() {
-                $('.deleteRow').off('click').on('click', function () {
-                    clearStatusMessage();
-                    var row = $(this).closest('tr');
-                    var identity = row.find('span').eq(0).text();
-                    var key = row.find('span').eq(1).text();
-                    var value = row.find('input').eq(0).val();
-                    var data = [];
-                    $('#tokenTableBody tr').each(function () {
-                        if ($(this).find('span').eq(0).text() !== identity || $(this).find('span').eq(1).text() !== key) {
-                            var rowIdentity = $(this).find('span').eq(0).text();
-                            var rowKey = $(this).find('span').eq(1).text();
-                            var rowValue = $(this).find('input').eq(0).val();
-                            data.push({ identity: rowIdentity, key: rowKey, value: rowValue });
-                        }
-                    });
-
-                    $.ajax({
-                        url: '/Api/Tokens',
-                        type: 'POST',
-                        contentType: 'application/json',
-                        data: JSON.stringify(data),
-                        success: function (response) {
-                            row.remove();
-                            showStatusMessage('Row deleted successfully', 'success');
-                        },
-                        error: function (xhr, status, error) {
-                            showStatusMessage('Error deleting row: ' + error, 'danger');
-                        }
-                    });
-                });
-            }
-        });
+                // Automatically refresh data
+                refreshData();
+            });
+        })();
     </script>
 </body>
 </html>
