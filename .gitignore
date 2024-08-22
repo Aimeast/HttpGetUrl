@@ -363,5 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # This project
-.pwData
-*/wwwroot/pw-*
+.hg
+*/wwwroot/hg-*

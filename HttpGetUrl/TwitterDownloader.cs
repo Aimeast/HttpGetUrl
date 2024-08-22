@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace HttpGetUrl;
 
+[Downloader("Twitter", ["x.com", "t.co"])]
 public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
     : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
 {
@@ -36,7 +37,7 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
                     if (node.ValueKind == JsonValueKind.String)
                     {
                         var videoUrl = node.ToString();
-                        backDownloaders[i] = Create(new Uri(videoUrl), null, workingFolder, CancellationTokenSource);
+                        backDownloaders[i] = ForkToHttpDownloader(new Uri(videoUrl), null);
                     }
                 }
                 tcs.SetResult();
@@ -81,20 +82,5 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
             }
         }
         backDownloaders = null;
-    }
-
-    public static async Task SetToken(string token)
-    {
-        await PwService.GetInstance().AddCookieAsync(new Cookie
-        {
-            Name = "auth_token",
-            Value = token,
-            Domain = ".x.com",
-            Path = "/",
-            Expires = DateTimeOffset.UtcNow.AddYears(1).ToUnixTimeSeconds(),
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteAttribute.None,
-        });
     }
 }

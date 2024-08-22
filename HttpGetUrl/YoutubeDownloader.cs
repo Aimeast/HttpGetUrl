@@ -1,11 +1,11 @@
 ﻿using FFMpegCore;
 using Microsoft.Extensions.FileProviders;
-using System.Net;
 using YoutubeExplode;
 using YoutubeExplode.Videos.Streams;
 
 namespace HttpGetUrl;
 
+[Downloader("Youtube", ["youtube.com", "youtu.be"])]
 public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
     : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
 {
@@ -20,17 +20,10 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
 
     public override async Task Analysis()
     {
-        var handler = new HttpClientHandler();
-        if (PwOptions.Proxy != null)
-            handler.Proxy = new WebProxy(PwOptions.Proxy);
-        var token = PwOptions.Tokens.First(x => x.Identity == "Youtube");
-        handler.UseCookies = true;
-        handler.CookieContainer.Add(new Cookie("GOOGLE_ABUSE_EXEMPTION", token.Value) { Domain = "youtube.com" });
-
-        var httpClient = new HttpClient(handler);
+        var httpClient = CreateHttpClient();
         var youtube = new YoutubeClient(httpClient);
         var video = await youtube.Videos.GetAsync(uri.ToString(), CancellationTokenSource.Token);
-        var streamManifest = await youtube.Videos.Streams.GetManifestAsync(video.Id);
+        var streamManifest = await youtube.Videos.Streams.GetManifestAsync(video.Id, CancellationTokenSource.Token);
         var videoInfo = streamManifest.GetVideoStreams()
             .OrderByDescending(x => x.VideoQuality)
             .ThenBy(x => codecRank.TryGetValue(x.VideoCodec.Split('.')[0], out var value) ? value : int.MaxValue)
@@ -42,20 +35,20 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
 
         if (videoInfo == audioInfo)
         {
-            backDownloaders = [Create(new Uri(videoInfo.Url), null, workingFolder, CancellationTokenSource)];
+            backDownloaders = [ForkToHttpDownloader(new Uri(videoInfo.Url), null)];
         }
         else
         {
-            var d1 = Create(new Uri(videoInfo.Url), null, workingFolder, CancellationTokenSource);
-            var d2 = Create(new Uri(audioInfo.Url), null, workingFolder, CancellationTokenSource);
             var n1 = $"video.{videoInfo.Container.Name}";
             var n2 = $"audio.{videoInfo.Container.Name}";
+            var d1 = ForkToHttpDownloader(new Uri(videoInfo.Url), null);
+            var d2 = ForkToHttpDownloader(new Uri(audioInfo.Url), null);
             d1.FinalFileNames = [n1];
             d2.FinalFileNames = [n2];
             backDownloaders = [d1, d2];
             FragmentFileNames = [n1, n2];
         }
-        FinalFileNames = [$"{MakeValidFileName(video.Title)}.{videoInfo.Container.Name}"];
+        FinalFileNames = [$"{Utility.MakeValidFileName(video.Title)}.{videoInfo.Container.Name}"];
         foreach (var downloader in backDownloaders)
         {
             await downloader.Analysis();
@@ -100,17 +93,5 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
             }
         }
         backDownloaders = null;
-    }
-
-    private static string MakeValidFileName(string fileName, char replacement = '_')
-    {
-        var invalidChars = Path.GetInvalidFileNameChars();
-        var chars = fileName.ToCharArray();
-        for (var i = 0; i < chars.Length; i++)
-        {
-            if (invalidChars.Contains(chars[i]))
-                chars[i] = replacement;
-        }
-        return new string(chars);
     }
 }

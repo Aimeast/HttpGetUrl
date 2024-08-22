@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.FileProviders;
-using System.Net;
 
 namespace HttpGetUrl;
 
@@ -130,17 +129,11 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
 
     public override async Task Analysis()
     {
-        if (httpClient != null || httpResponseMessage != null)
-            throw new InvalidOperationException("Analysis has been called.");
-
-        var handler = new HttpClientHandler();
-        if (PwOptions.Proxy != null)
-            handler.Proxy = new WebProxy(PwOptions.Proxy);
-        httpClient = new HttpClient(handler);
+        var httpClient = CreateHttpClient();
         if (referrer != null)
             httpClient.DefaultRequestHeaders.Referrer = referrer;
 
-        httpResponseMessage = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
+        httpResponseMessage = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, CancellationTokenSource.Token);
         httpResponseMessage.EnsureSuccessStatusCode();
 
         var filename = httpResponseMessage.Content.Headers.ContentDisposition?.FileName?.Trim('"') ?? "";

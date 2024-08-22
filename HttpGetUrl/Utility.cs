@@ -2,7 +2,7 @@
 
 namespace HttpGetUrl;
 
-public static class Extensions
+public static class Utility
 {
     public static IEnumerable<JsonElement> SearchJson(this JsonElement jsonElement, string searchText)
     {
@@ -24,5 +24,30 @@ public static class Extensions
         foreach (var element in elements)
             foreach (var yield in SearchJson(element, searchText))
                 yield return yield;
+    }
+
+    public static bool IsSubdomain(string parentDomain, string subDomain)
+    {
+        if (!parentDomain.StartsWith("."))
+        {
+            parentDomain = "." + parentDomain;
+        }
+        if (!subDomain.StartsWith("."))
+        {
+            subDomain = "." + subDomain;
+        }
+        return subDomain.EndsWith(parentDomain, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string MakeValidFileName(string fileName, char replacement = '_')
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var chars = fileName.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (invalidChars.Contains(chars[i]))
+                chars[i] = replacement;
+        }
+        return new string(chars);
     }
 }

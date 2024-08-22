@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.FileProviders;
+using System.Net;
 
 namespace HttpGetUrl;
 
@@ -8,7 +9,9 @@ public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider wor
     protected Uri referrer = referrer;
     public IFileProvider WorkingFolder { get; } = workingFolder;
 
-    public CancellationTokenSource CancellationTokenSource { get; } = cancellationTokenSource ?? new();
+    protected HttpClientHandler httpClientHandler;
+
+    public CancellationTokenSource CancellationTokenSource { get; } = cancellationTokenSource;
     public string[] FinalFileNames { get; internal set; } = [];
     public string[] FragmentFileNames { get; protected set; } = [];
     public long EstimatedContentLength { get; protected set; }
@@ -18,21 +21,37 @@ public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider wor
     public abstract Task Merge();
     public abstract void Dispose();
 
-    public static ContentDownloader Create(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource = null)
+    protected virtual HttpClient CreateHttpClient()
     {
-        switch (uri.Host)
+        if (httpClientHandler == null)
         {
-            case "x.com":
-            case "t.co":
-                return new TwitterDownloader(uri, referrer, workingFolder, cancellationTokenSource);
-            case "www.youtube.com":
-            case "m.youtube.com":
-            case "youtube.com":
-            case "youtu.be":
-                return new YoutubeDownloader(uri, referrer, workingFolder, cancellationTokenSource);
-            default:
-                return new HttpDownloader(uri, referrer, workingFolder, cancellationTokenSource);
+            httpClientHandler = new HttpClientHandler();
+            if (PwOptions.Proxy != null)
+                httpClientHandler.Proxy = new WebProxy(PwOptions.Proxy);
+            httpClientHandler.UseCookies = PwOptions.Tokens.Length > 0;
+            var attr = this.GetType().GetCustomAttribute<DownloaderAttribute>();
+            if (attr != null)
+            {
+                var token = PwOptions.Tokens.FirstOrDefault(x => x.Identity == attr.Identity);
+                if (token != null)
+                {
+                    foreach (var domain in attr.SupportedDomains)
+                        httpClientHandler.CookieContainer.Add(new Cookie(token.Key, token.Value) { Domain = domain });
+                }
+            }
         }
+
+        var httpClient = new HttpClient(httpClientHandler);
+        return httpClient;
+    }
+
+    public HttpDownloader ForkToHttpDownloader(Uri uri, Uri referrer)
+    {
+        var http = new HttpDownloader(uri, referrer, WorkingFolder, CancellationTokenSource)
+        {
+            httpClientHandler = httpClientHandler
+        };
+        return http;
     }
 
     public static PwOptions PwOptions { get; private set; }

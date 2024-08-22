@@ -1,4 +1,5 @@
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.FileProviders.Physical;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -24,28 +25,31 @@ public class Program
         options.StaticFileOptions.DefaultContentType = "application/octet-stream";
         app.UseFileServer(options);
 
-        var tokenFileInfo = builder.Environment.ContentRootFileProvider.GetFileInfo("tokens.json");
+        var dataProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, ".hg"), ExclusionFilters.None);
+        var tokenFileInfo = dataProvider.GetFileInfo("tokens.json");
         var tokens = Token.GetTokens(tokenFileInfo);
         ContentDownloader.InitService(new PwOptions
         {
-            UserDataDir = Path.Combine(builder.Environment.ContentRootPath, ".pwData"),
+            UserDataDir = dataProvider.Root,
             Proxy = builder.Configuration["HttpGetUrl:Proxy"],
             Tokens = tokens,
         });
+        var downloaderService = new DownloaderService().RegisterAll();
 
+        #region app.Map to Task
         app.MapGet("/task", () =>
         {
             var selector = builder.Environment.ContentRootFileProvider
             .GetDirectoryContents("wwwroot")
-            .Where(x => x.IsDirectory && Regex.IsMatch(x.Name, @"^pw-\d{8}-\d{6}$"))
+            .Where(x => x.IsDirectory && Regex.IsMatch(x.Name, @"^hg-\d{8}-\d{6}$"))
             .Select(x =>
             {
                 var item = default(TaskItem);
-                using var provider = new PhysicalFileProvider(x.PhysicalPath);
+                using var provider = new PhysicalFileProvider(x.PhysicalPath, ExclusionFilters.None);
 
                 try
                 {
-                    using var reader = new StreamReader(provider.GetFileInfo(x.Name + ".json").CreateReadStream());
+                    using var reader = new StreamReader(provider.GetFileInfo($".{x.Name}.json").CreateReadStream());
                     item = JsonSerializer.Deserialize<TaskItem>(reader.ReadToEnd());
                     ArgumentNullException.ThrowIfNull(item);
                 }
@@ -85,10 +89,10 @@ public class Program
             item.DateTime = DateTime.Now.ToString("yyyyMMdd-HHmmss");
             item.Files = [];
             item.EstimatedLength = -1;
-            var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"pw-{item.DateTime}");
+            var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"hg-{item.DateTime}");
             Directory.CreateDirectory(folderPath);
 
-            var downloader = ContentDownloader.Create(item.Url, item.Referrer, new PhysicalFileProvider(folderPath));
+            var downloader = downloaderService.CreateDownloader(item.Url, item.Referrer, new PhysicalFileProvider(folderPath, ExclusionFilters.None));
             downloaders.TryAdd(item.DateTime, downloader);
 
             await SaveTaskToJson(downloader.WorkingFolder, item);
@@ -149,7 +153,7 @@ public class Program
                 while (downloaders.ContainsKey(datetime))
                     await Task.Delay(10);
 
-                var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"pw-{datetime}");
+                var folderPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", $"hg-{datetime}");
                 if (Directory.Exists(folderPath))
                     Directory.Delete(folderPath, true);
 
@@ -160,6 +164,8 @@ public class Program
                 return Results.BadRequest(ex.Message);
             }
         });
+        #endregion
+        #region app.Map to Tokens
         app.MapGet("/tokens", () =>
         {
             var tokens = Token.GetTokens(tokenFileInfo);
@@ -169,9 +175,10 @@ public class Program
         {
             ContentDownloader.PwOptions.Tokens = tokens;
             await Token.SaveTokensAsync(tokenFileInfo, tokens);
-            await TwitterDownloader.SetToken(tokens.First(x => x.Identity == "Twitter").Value);
+            await PwService.GetInstance().UpdateTokesAsync(tokens);
             return Results.Ok();
         });
+        #endregion
 
         app.Run();
 
@@ -180,7 +187,7 @@ public class Program
 
     private static async Task SaveTaskToJson(IFileProvider fileProvider, TaskItem item)
     {
-        var jsonPath = fileProvider.GetFileInfo($"pw-{item.DateTime}.json").PhysicalPath;
+        var jsonPath = fileProvider.GetFileInfo($".hg-{item.DateTime}.json").PhysicalPath;
         var content = JsonSerializer.Serialize(item);
         await File.WriteAllTextAsync(jsonPath, content);
     }
