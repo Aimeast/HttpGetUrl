@@ -61,31 +61,20 @@ public class PwService
 
     public async Task UpdateTokesAsync(Token[] tokens)
     {
-        var cookies = new List<Cookie>();
-        var attrs = Assembly.GetCallingAssembly().GetTypes()
-            .Select(x => x.GetCustomAttribute<DownloaderAttribute>())
-            .Where(x => x != null);
-        foreach (var attr in attrs)
+        var cookies = tokens.Select(x => new Cookie
         {
-            var token = tokens.FirstOrDefault(x => x.Identity == attr.Identity);
-            if (token != null)
-            {
-                foreach (var domain in attr.SupportedDomains)
-                {
-                    cookies.Add(new Cookie
-                    {
-                        Name = token.Key,
-                        Value = token.Value,
-                        Domain = domain,
-                        Expires = DateTimeOffset.UtcNow.AddYears(1).ToUnixTimeSeconds(),
-                        Path = "/",
-                        HttpOnly = true,
-                        Secure = true,
-                        SameSite = SameSiteAttribute.None,
-                    });
-                }
-            }
+            Name = x.Name,
+            Value = x.Value,
+            Domain = x.Domain,
+            Path = x.Path,
+            Expires = new DateTimeOffset(x.Expires.ToUniversalTime()).ToUnixTimeSeconds(),
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteAttribute.None,
+        });
+        foreach (var cookie in cookies)
+        {
+            await browserContext.AddCookiesAsync([cookie]);
         }
-        await browserContext.AddCookiesAsync(cookies);
     }
 }

@@ -27,6 +27,11 @@ public class Program
 
         var dataProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, ".hg"), ExclusionFilters.None);
         var tokenFileInfo = dataProvider.GetFileInfo("tokens.json");
+        if (!tokenFileInfo.Exists)
+        {
+            File.WriteAllText(tokenFileInfo.PhysicalPath, "[]");
+            tokenFileInfo = dataProvider.GetFileInfo("tokens.json");
+        }
         var tokens = Token.GetTokens(tokenFileInfo);
         ContentDownloader.InitService(new PwOptions
         {

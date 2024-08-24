@@ -41,12 +41,15 @@
 <body>
     <div class="container mt-5">
         <div id="statusMessage" class="alert" style="display: none;"></div>
+        <input type="file" id="fileUpload" accept=".json" class="form-control mb-3" />
         <table class="table table-bordered">
             <thead>
                 <tr>
-                    <th>Identity</th>
-                    <th>Key</th>
+                    <th>Domain</th>
+                    <th>Name</th>
                     <th>Value</th>
+                    <th>Path</th>
+                    <th>Expires</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -72,11 +75,19 @@
 
             function addRow() {
                 clearStatusMessage();
+
+                const oneYearLater = new Date();
+                oneYearLater.setFullYear(oneYearLater.getFullYear() + 1); // Default max age is one year from now
+                const localExpirationDate = oneYearLater.toLocaleString(); // Local time format
+                const isoExpirationDate = oneYearLater.toISOString(); // ISO format
+
                 $('#tokenTableBody').append(`
                     <tr>
-                        <td data-label="Identity"><input type="text" class="form-control"></td>
-                        <td data-label="Key"><input type="text" class="form-control"></td>
+                        <td data-label="Domain"><input type="text" class="form-control"></td>
+                        <td data-label="Name"><input type="text" class="form-control"></td>
                         <td data-label="Value"><input type="text" class="form-control rowValue"></td>
+                        <td data-label="Path"><input type="text" class="form-control" value="/"></td>
+                        <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
                         <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                     </tr>
                 `);
@@ -85,7 +96,7 @@
 
             function attachRowEvent() {
                 $('.deleteRow').off('click').on('click', function () {
-                    var tr = $(this).closest('tr');
+                    const tr = $(this).closest('tr');
                     tr.find('td').each(function () { $(this).find('input,span').css('text-decoration', 'line-through'); });
                     // Mark row as deleted by adding a data attribute
                     tr.data('deleted', 'true');
@@ -94,35 +105,22 @@
                 $('.rowValue').off('focus').on('focus', function () { this.select(); });
             }
 
-            // Helper Functions
-            function getUrlParent(fullUrl) {
-                try {
-                    var url = new URL(fullUrl);
-                    var baseUrl = url.origin;
-                    var path = url.pathname;
-                    if (path !== "" && !path.endsWith("/")) {
-                        path = path.substring(0, path.lastIndexOf("/") + 1);
-                    }
-                    return baseUrl + path;
-                } catch (e) {
-                    return "";
-                }
-            }
-
-            // Api url
-            const apiUrl = getUrlParent(window.location.href) + 'tokens';
-
-            // Request Functions
+            // Events
             function refreshData() {
                 clearStatusMessage();
                 $.get(apiUrl, function (data) {
                     $('#tokenTableBody').empty();
                     data.forEach(function (token) {
+                        const localExpirationDate = token.expires ? new Date(token.expires).toLocaleString() : '';
+                        const isoExpirationDate = token.expires;
+
                         $('#tokenTableBody').append(`
                             <tr>
-                                <td data-label="Identity"><span>${token.identity}</span></td>
-                                <td data-label="Key"><span>${token.key}</span></td>
+                                <td data-label="Domain"><span>${token.domain}</span></td>
+                                <td data-label="Name"><span>${token.name}</span></td>
                                 <td data-label="Value"><input type="text" class="form-control rowValue" value="${token.value}"></td>
+                                <td data-label="Path"><span>${token.path}</span></td>
+                                <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
                                 <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                             </tr>
                         `);
@@ -135,20 +133,25 @@
 
             function submitData() {
                 clearStatusMessage();
-                var data = [];
+                const data = [];
+                const now = new Date();
                 $('#tokenTableBody tr').each(function () {
                     if ($(this).data('deleted'))
                         return;
-                    if ($(this).find('span').length > 0) {
-                        identity = $(this).find('span').eq(0).text();
-                        key = $(this).find('span').eq(1).text();
-                    } else {
-                        identity = $(this).find('input').eq(0).val();
-                        key = $(this).find('input').eq(1).val();
-                    }
-                    value = $(this).find('input').last().val();
-                    data.push({ identity: identity, key: key, value: value });
+                    const td = $(this).find('td');
+                    const domain = td.eq(0).find('input').val() || td.eq(0).find('span').text();
+                    const name = td.eq(1).find('input').val() || td.eq(1).find('span').text();
+                    const value = td.eq(2).find('input').val();
+                    const path = td.eq(3).find('input').val() || td.eq(3).find('span').text();
+                    const expires = td.eq(4).find('input').data('isoDate');
+
+                    if (new Date(expires) > now)
+                        data.push({ name: name, value: value, domain: domain, path: path, expires: expires });
                 });
+
+                // Sort the data before submitting
+                data.sort(compareCookies);
+
                 $.ajax({
                     url: apiUrl,
                     type: 'POST',
@@ -164,12 +167,109 @@
                 });
             }
 
+            function parseJson(e) {
+                try {
+                    const existingRows = $('#tokenTableBody').find('tr');
+                    const jsonData = JSON.parse(e.target.result);
+                    const cookies = jsonData.cookies || [];
+
+                    cookies.sort(compareCookies);
+                    cookies.forEach(cookie => {
+                        if (!cookie.name || !cookie.domain || !cookie.expirationDate) {
+                            // Skip cookies missing name, domain, or expirationDate
+                            return;
+                        }
+
+                        let found = false;
+                        const localExpirationDate = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toLocaleString() : '';
+                        const isoExpirationDate = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toISOString() : '';
+
+                        // Iterate through existing rows to check for matching rows
+                        existingRows.each(function () {
+                            const td = $(this).find('td');
+                            const rowDomain = td.eq(0).find('input').val() || td.eq(0).find('span').text();
+                            const rowName = td.eq(1).find('input').val() || td.eq(1).find('span').text();
+
+                            if (rowDomain === cookie.domain && rowName === cookie.name) {
+                                // Update existing row
+                                td.eq(2).find('input').val(cookie.value);
+                                td.eq(3).find('input').val(cookie.path);
+                                td.eq(4).find('input').val(localExpirationDate);
+                                td.eq(4).find('input').data('isoDate', isoExpirationDate);
+                                found = true;
+                                return false; // Exit each loop
+                            }
+                        });
+
+                        if (!found) {
+                            // Add new row
+                            $('#tokenTableBody').append(`
+                                <tr>
+                                    <td data-label="Domain"><input type="text" class="form-control" value="${cookie.domain}"></td>
+                                    <td data-label="Name"><input type="text" class="form-control" value="${cookie.name}"></td>
+                                    <td data-label="Value"><input type="text" class="form-control" value="${cookie.value}"></td>
+                                    <td data-label="Path"><input type="text" class="form-control" value="${cookie.path}"></td>
+                                    <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
+                                    <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
+                                </tr>
+                            `);
+                        }
+                    });
+
+                    attachRowEvent();
+                } catch (error) {
+                    showStatusMessage('Error parsing JSON file: ' + error.message, 'danger');
+                }
+            };
+
+            function handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (file && file.type === 'application/json') {
+                    const reader = new FileReader();
+                    reader.onload = parseJson;
+                    reader.readAsText(file);
+                } else {
+                    showStatusMessage('Please select a valid JSON file.', 'danger');
+                }
+            }
+
+            // Helper Functions
+            function compareCookies(a, b) {
+                const domainA = a.domain.toLowerCase();
+                const domainB = b.domain.toLowerCase();
+                const nameA = a.name.toLowerCase();
+                const nameB = b.name.toLowerCase();
+
+                if (domainA < domainB) return -1;
+                if (domainA > domainB) return 1;
+
+                if (nameA < nameB) return -1;
+                if (nameA > nameB) return 1;
+
+                return 0;
+            }
+
+            function getUrlParent(fullUrl) {
+                try {
+                    const url = new URL(fullUrl);
+                    const baseUrl = url.origin;
+                    let path = url.pathname;
+                    if (path !== "" && !path.endsWith("/")) {
+                        path = path.substring(0, path.lastIndexOf("/") + 1);
+                    }
+                    return baseUrl + path;
+                } catch (e) {
+                    return "";
+                }
+            }
+
+            const apiUrl = getUrlParent(window.location.href) + 'tokens';
+
             $(document).ready(function () {
                 $('#refresh').click(refreshData);
                 $('#submit').click(submitData);
                 $('#addRow').click(addRow);
-
-                // Automatically refresh data
+                $('#fileUpload').change(handleFileUpload);
                 refreshData();
             });
         })();

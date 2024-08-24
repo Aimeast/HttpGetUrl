@@ -28,16 +28,10 @@ public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider wor
             httpClientHandler = new HttpClientHandler();
             if (PwOptions.Proxy != null)
                 httpClientHandler.Proxy = new WebProxy(PwOptions.Proxy);
-            httpClientHandler.UseCookies = PwOptions.Tokens.Length > 0;
-            var attr = this.GetType().GetCustomAttribute<DownloaderAttribute>();
-            if (attr != null)
+            httpClientHandler.UseCookies = true;
+            foreach (var token in PwOptions.Tokens)
             {
-                var token = PwOptions.Tokens.FirstOrDefault(x => x.Identity == attr.Identity);
-                if (token != null)
-                {
-                    foreach (var domain in attr.SupportedDomains)
-                        httpClientHandler.CookieContainer.Add(new Cookie(token.Key, token.Value) { Domain = domain });
-                }
+                httpClientHandler.CookieContainer.Add(new Cookie(token.Name, token.Value) { Domain = token.Domain, Expires = token.Expires });
             }
         }
 

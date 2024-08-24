@@ -5,9 +5,11 @@ namespace HttpGetUrl;
 
 public class Token
 {
-    public string Identity { get; set; }
-    public string Key { get; set; }
+    public string Name { get; set; }
     public string Value { get; set; }
+    public string Domain { get; set; }
+    public string Path { get; set; }
+    public DateTime Expires { get; set; }
 
     public static async Task SaveTokensAsync(IFileInfo tokenFileInfo, Token[] tokens)
     {
