@@ -17,6 +17,7 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
     };
 
     ContentDownloader[] backDownloaders = null;
+    string videoContainerName;
 
     public override async Task Analysis()
     {
@@ -33,14 +34,15 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
             .Where(x => x.Container == videoInfo.Container)
             .MaxBy(x => x.Size);
 
+        videoContainerName = videoInfo.Container.Name;
         if (videoInfo == audioInfo)
         {
             backDownloaders = [ForkToHttpDownloader(new Uri(videoInfo.Url), null)];
         }
         else
         {
-            var n1 = $"video.{videoInfo.Container.Name}";
-            var n2 = $"audio.{videoInfo.Container.Name}";
+            var n1 = $"video.{videoContainerName}";
+            var n2 = $"audio.{videoContainerName}";
             var d1 = ForkToHttpDownloader(new Uri(videoInfo.Url), null);
             var d2 = ForkToHttpDownloader(new Uri(audioInfo.Url), null);
             d1.FinalFileNames = [n1];
@@ -48,7 +50,7 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
             backDownloaders = [d1, d2];
             FragmentFileNames = [n1, n2];
         }
-        FinalFileNames = [$"{Utility.MakeValidFileName(video.Title)}.{videoInfo.Container.Name}"];
+        FinalFileNames = [$"{Utility.MakeValidFileName(video.Title)}.{videoContainerName}"];
         foreach (var downloader in backDownloaders)
         {
             await downloader.Analysis();
@@ -62,14 +64,14 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
         return lengths.Sum();
     }
 
-    public override async Task Merge()
+    public override async Task<long> Merge()
     {
         if (backDownloaders.Length == 1)
-            return;
+            return -1;
 
         string videoFilePath = WorkingFolder.GetFileInfo(backDownloaders[0].FinalFileNames[0]).PhysicalPath;
         string audioFilePath = WorkingFolder.GetFileInfo(backDownloaders[1].FinalFileNames[0]).PhysicalPath;
-        string outputFilePath = WorkingFolder.GetFileInfo(FinalFileNames[0]).PhysicalPath;
+        string outputFilePath = $"output.{videoContainerName}";
 
         var result = await FFMpegArguments
             .FromFileInput(videoFilePath)
@@ -79,8 +81,11 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
                 .WithAudioCodec("copy"))
             .ProcessAsynchronously();
 
+        File.Move(outputFilePath, WorkingFolder.GetFileInfo(FinalFileNames[0]).PhysicalPath);
         File.Delete(videoFilePath);
         File.Delete(audioFilePath);
+
+        return WorkingFolder.GetFileInfo(FinalFileNames[0]).Length;
     }
 
     public override void Dispose()

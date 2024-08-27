@@ -23,9 +23,15 @@
 
                 .table td {
                     text-align: right;
-                    padding-left: 15px;
                     position: relative;
                 }
+
+                    .table td input {
+                        width: calc(100% - 55px);
+                        margin-left: 55px;
+                        box-sizing: border-box;
+                        text-align: right;
+                    }
 
                     .table td::before {
                         content: attr(data-label);
@@ -101,6 +107,7 @@
                     // Mark row as deleted by adding a data attribute
                     tr.data('deleted', 'true');
                     tr.find('input,button').attr('disabled', true);
+                    hasDeleting = true;
                 });
                 $('.rowValue').off('focus').on('focus', function () { this.select(); });
             }
@@ -109,10 +116,13 @@
             function refreshData() {
                 clearStatusMessage();
                 $.get(apiUrl, function (data) {
+                    const now = new Date();
                     $('#tokenTableBody').empty();
                     data.forEach(function (token) {
-                        const localExpirationDate = token.expires ? new Date(token.expires).toLocaleString() : '';
+                        const expires = new Date(token.expires);
+                        const localExpirationDate = token.expires ? expires.toLocaleString() : '';
                         const isoExpirationDate = token.expires;
+                        const isExpired = expires < now;
 
                         $('#tokenTableBody').append(`
                             <tr>
@@ -120,7 +130,7 @@
                                 <td data-label="Name"><span>${token.name}</span></td>
                                 <td data-label="Value"><input type="text" class="form-control rowValue" value="${token.value}"></td>
                                 <td data-label="Path"><span>${token.path}</span></td>
-                                <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
+                                <td data-label="Expires"><input type="text" class="form-control" style="${isExpired ? 'color: darkred' : ''}" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
                                 <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                             </tr>
                         `);
@@ -223,6 +233,10 @@
             };
 
             function handleFileUpload(event) {
+                if (hasDeleting) {
+                    alert("There is data deletion hanging, please submit and then import.");
+                    return;
+                }
                 const file = event.target.files[0];
                 if (file && file.type === 'application/json') {
                     const reader = new FileReader();
@@ -231,6 +245,7 @@
                 } else {
                     showStatusMessage('Please select a valid JSON file.', 'danger');
                 }
+                event.target.value = "";
             }
 
             // Helper Functions
@@ -264,6 +279,7 @@
             }
 
             const apiUrl = getUrlParent(window.location.href) + 'tokens';
+            let hasDeleting = false;
 
             $(document).ready(function () {
                 $('#refresh').click(refreshData);

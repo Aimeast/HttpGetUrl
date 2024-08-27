@@ -81,6 +81,9 @@
                 </tbody>
             </table>
         </div>
+        <div>
+            <span id="infos"></span>
+        </div>
     </div>
 
     <script>
@@ -175,6 +178,7 @@
 
             // Api url
             const apiUrl = getUrlParent(window.location.href) + 'task';
+            const apiInfo = getUrlParent(window.location.href) + 'info';
 
             // Request Functions
             function refreshTable() {
@@ -186,7 +190,7 @@
                         var fileline = '';
                         item.files.forEach(function (file) {
                             if (seq > 0) fileline += `${getCircledNumber(seq++)}`;
-                            fileline += `<a target="_blank" href="./hg-${item.dateTime}/${file}">${file}</a> `
+                            fileline += `<a target="_blank" href="./hg-${item.dateTime}/${encodeURIComponent(file)}">${file}</a> `
                         });
                         $('#table-body').append(
                             `<tr>
@@ -200,6 +204,9 @@
                     });
                 }).fail(function (jqXHR, textStatus, errorThrown) {
                     showError(`Failed to refresh data: ${textStatus} - ${errorThrown}`);
+                });
+                $.get(apiInfo, function (data) {
+                    $('#infos').text(`DiskFreeSpace: ${formatSize(data.freeSpace)} / DiskTotalSize: ${formatSize(data.totalSize)}`);
                 });
             }
 

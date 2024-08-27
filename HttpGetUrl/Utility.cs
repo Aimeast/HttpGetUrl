@@ -41,7 +41,10 @@ public static class Utility
 
     public static string MakeValidFileName(string fileName, char replacement = '_')
     {
-        var invalidChars = Path.GetInvalidFileNameChars();
+        // Define invalid characters based on Windows, Linux, and macOS.
+        // DO NOT call `Path.GetInvalidFileNameChars()`,
+        // Because the array returned is different on different operating systems.
+        char[] invalidChars = [ '\\', '/', ':', '*', '?', '"', '<', '>', '|' ];
         var chars = fileName.ToCharArray();
         for (var i = 0; i < chars.Length; i++)
         {
@@ -49,5 +52,17 @@ public static class Utility
                 chars[i] = replacement;
         }
         return new string(chars);
+    }
+
+    public static string TruncateString(string input, int startLength, int endLength)
+    {
+        if (input.Length <= startLength + endLength)
+        {
+            return input;
+        }
+
+        string start = input.Substring(0, startLength);
+        string end = input.Substring(input.Length - endLength, endLength);
+        return $"{start}........{end}";
     }
 }

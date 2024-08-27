@@ -18,7 +18,7 @@ public abstract class ContentDownloader(Uri uri, Uri referrer, IFileProvider wor
 
     public abstract Task Analysis();
     public abstract Task<long> Download();
-    public abstract Task Merge();
+    public abstract Task<long> Merge();
     public abstract void Dispose();
 
     protected virtual HttpClient CreateHttpClient()

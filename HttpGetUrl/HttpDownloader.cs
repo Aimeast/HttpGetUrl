@@ -171,7 +171,7 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
         }
     }
 
-    public override Task Merge()
+    public override Task<long> Merge()
     {
         throw new InvalidOperationException($"Merge not supported by {nameof(HttpDownloader)}.");
     }

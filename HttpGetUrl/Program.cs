@@ -130,7 +130,9 @@ public class Program
 
                         if (downloader.FragmentFileNames.Length > 0)
                         {
-                            await downloader.Merge();
+                            var length = await downloader.Merge();
+                            if (length > 0)
+                                item.DownloadedLength = length;
                             item.Status = DownloadStatus.Completed;
                             await SaveTaskToJson(downloader.WorkingFolder, item);
                         }
@@ -138,7 +140,8 @@ public class Program
                     catch (Exception ex)
                     {
                         item.Status = DownloadStatus.Error;
-                        item.ErrorMessage = $"{ex.GetType().Name}: {ex.Message}";
+                        // ffmpeg message may very large. So, truncate
+                        item.ErrorMessage = $"{ex.GetType().Name}: {Utility.TruncateString(ex.Message, 100, 300)}";
                         await SaveTaskToJson(downloader.WorkingFolder, item);
                     }
                     finally
@@ -184,6 +187,17 @@ public class Program
             return Results.Ok();
         });
         #endregion
+        #region app.Map to Info
+        app.MapGet("/info", (string[] parms) =>
+        {
+            var driveInfo = DriveInfo.GetDrives().FirstOrDefault(x => builder.Environment.ContentRootPath.StartsWith(x.Name, StringComparison.OrdinalIgnoreCase));
+            return new
+            {
+                FreeSpace = driveInfo.AvailableFreeSpace,
+                TotalSize = driveInfo.TotalSize,
+            };
+        });
+        #endregion
 
         app.Run();
 
@@ -194,7 +208,7 @@ public class Program
     {
         var jsonPath = fileProvider.GetFileInfo($".hg-{item.DateTime}.json").PhysicalPath;
         var content = JsonSerializer.Serialize(item);
-        await File.WriteAllTextAsync(jsonPath, content);
+        await File.WriteAllTextAsync(jsonPath, content).ConfigureAwait(false);
     }
 
     private class TaskItem
