@@ -1,7 +1,7 @@
 ﻿using FFMpegCore;
 using Microsoft.Extensions.FileProviders;
-using YoutubeExplode;
-using YoutubeExplode.Videos.Streams;
+using YoutubeDLSharp;
+using YoutubeDLSharp.Options;
 
 namespace HttpGetUrl;
 
@@ -9,48 +9,50 @@ namespace HttpGetUrl;
 public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
     : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
 {
-    static readonly Dictionary<string, double> codecRank = new()
-    {
-        {"av01", 10},
-        {"vp9", 11},
-        {"avc1", 12},
-    };
-
     ContentDownloader[] backDownloaders = null;
     string videoContainerName;
 
     public override async Task Analysis()
     {
-        var httpClient = CreateHttpClient();
-        var youtube = new YoutubeClient(httpClient);
-        var video = await youtube.Videos.GetAsync(uri.ToString(), CancellationTokenSource.Token);
-        var streamManifest = await youtube.Videos.Streams.GetManifestAsync(video.Id, CancellationTokenSource.Token);
-        var videoInfo = streamManifest.GetVideoStreams()
-            .OrderByDescending(x => x.VideoQuality)
-            .ThenBy(x => codecRank.TryGetValue(x.VideoCodec.Split('.')[0], out var value) ? value : int.MaxValue)
-            .ThenByDescending(x => x.Size.Bytes)
-            .First();
-        var audioInfo = videoInfo as IAudioStreamInfo ?? streamManifest.GetAudioStreams()
-            .Where(x => x.Container == videoInfo.Container)
-            .MaxBy(x => x.Size);
-
-        videoContainerName = videoInfo.Container.Name;
-        if (videoInfo == audioInfo)
+        var ytdl = new YoutubeDL { YoutubeDLPath = Path.Combine(".hg", Utils.YtDlpBinaryName) };
+        var options = new OptionSet
         {
-            backDownloaders = [ForkToHttpDownloader(new Uri(videoInfo.Url), null)];
+            Proxy = PwOptions.Proxy,
+        };
+
+        var result = await ytdl.RunVideoDataFetch(uri.ToString(), ct: CancellationTokenSource.Token, overrideOptions: options);
+        result.EnsureSuccess();
+
+        // youtube_formats: https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
+        var formats = result.Data.Formats.Where(x => x.FileSize != null);
+        var bestVideo = formats.Where(x => x.VideoCodec != "none")
+            .OrderByDescending(x => x.Quality)
+            .ThenBy(x => x.FileSize)
+            .First();
+        var bestAudio = formats.Where(f => f.AudioCodec != "none")
+            .Select(x => { if (x.Extension == "m4a") x.Extension = "mp4"; return x; })
+            .Where(x => x.Extension == bestVideo.Extension)
+            .OrderByDescending(x => x.Quality)
+            .ThenBy(x => x.FileSize)
+            .First();
+
+        videoContainerName = bestVideo.Extension;
+        if (bestVideo == bestAudio)
+        {
+            backDownloaders = [ForkToHttpDownloader(new Uri(bestVideo.Url), null)];
         }
         else
         {
             var n1 = $"video.{videoContainerName}";
             var n2 = $"audio.{videoContainerName}";
-            var d1 = ForkToHttpDownloader(new Uri(videoInfo.Url), null);
-            var d2 = ForkToHttpDownloader(new Uri(audioInfo.Url), null);
+            var d1 = ForkToHttpDownloader(new Uri(bestVideo.Url), null);
+            var d2 = ForkToHttpDownloader(new Uri(bestAudio.Url), null);
             d1.FinalFileNames = [n1];
             d2.FinalFileNames = [n2];
             backDownloaders = [d1, d2];
             FragmentFileNames = [n1, n2];
         }
-        FinalFileNames = [$"{Utility.MakeValidFileName(video.Title)}.{videoContainerName}"];
+        FinalFileNames = [$"{Utility.MakeValidFileName(result.Data.Title)}.{videoContainerName}"];
         foreach (var downloader in backDownloaders)
         {
             await downloader.Analysis();
