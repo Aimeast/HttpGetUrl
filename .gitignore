@@ -365,3 +365,4 @@ FodyWeavers.xsd
 # This project
 .hg
 */wwwroot/hg-*
+VersionInfo.cs

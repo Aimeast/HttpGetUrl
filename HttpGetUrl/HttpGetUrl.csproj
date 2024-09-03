@@ -1,6 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <Version>1.0.0</Version>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -11,4 +12,24 @@
     <PackageReference Include="YoutubeDLSharp" Version="1.1.1" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <VersionInfoFile>Properties\VersionInfo.cs</VersionInfoFile>
+    <NewEnvPath>$(ProgramFiles)\Git\bin;$(ProgramFiles(x86))\Git\bin;C:\PortableGit\bin;D:\PortableGit\bin;$(Path)</NewEnvPath>
+    <BuildDateTime>$([System.DateTimeOffset]::Now.ToString())</BuildDateTime>
+  </PropertyGroup>
+
+  <Target Name="GenerateVersionInfo" BeforeTargets="BeforeBuild">
+    <Exec Command="git log -1 --format=reference"
+          Condition="Exists('..\.git')"
+          EnvironmentVariables="PATH=$(NewEnvPath.Replace(';','%3B'))"
+          StdOutEncoding="utf-8"
+          ConsoleToMSBuild="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitLog" />
+    </Exec>
+
+    <WriteLinesToFile
+      File="$(VersionInfoFile)"
+      Overwrite="true"
+      Lines="public static class VersionInfo&#xD;&#xA;{&#xD;&#xA;    public const string Version = &quot;$(Version)&quot;%3B&#xD;&#xA;    public const string GitLog = &quot;$(GitLog)&quot;%3B&#xD;&#xA;    public const string BuildDateTime = &quot;$(BuildDateTime)&quot;%3B&#xD;&#xA;    public const string Configuration = &quot;$(Configuration)&quot;%3B&#xD;&#xA;}" />
+  </Target>
 </Project>

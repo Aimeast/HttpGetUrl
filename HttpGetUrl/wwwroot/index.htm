@@ -206,7 +206,7 @@
                     showError(`Failed to refresh data: ${textStatus} - ${errorThrown}`);
                 });
                 $.get(apiInfo, function (data) {
-                    $('#infos').text(`DiskFreeSpace: ${formatSize(data.freeSpace)} / DiskTotalSize: ${formatSize(data.totalSize)}`);
+                    $('#infos').text(`FreeSpace: ${formatSize(data.diskUsage.freeSpace)} / DiskSize: ${formatSize(data.diskUsage.diskSize)}`);
                 });
             }
 

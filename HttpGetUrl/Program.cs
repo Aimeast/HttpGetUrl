@@ -2,7 +2,9 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.FileProviders.Physical;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using YoutubeDLSharp;
 
 namespace HttpGetUrl;
 
@@ -188,14 +190,53 @@ public class Program
         });
         #endregion
         #region app.Map to Info
-        app.MapGet("/info", (string[] parms) =>
+        app.MapGet("/info", async (string q) =>
         {
-            var driveInfo = DriveInfo.GetDrives().FirstOrDefault(x => builder.Environment.ContentRootPath.StartsWith(x.Name, StringComparison.OrdinalIgnoreCase));
-            return new
+            var parms = (string.IsNullOrWhiteSpace(q) ? "diskusage" : q)
+                .Split(',').Select(x => x.ToLower()).Distinct().OrderBy(x => x).ToArray();
+            var infos = new JsonObject();
+            if (parms.Contains("diskusage"))
             {
-                FreeSpace = driveInfo.AvailableFreeSpace,
-                TotalSize = driveInfo.TotalSize,
-            };
+                var driveInfo = DriveInfo.GetDrives().FirstOrDefault(x => builder.Environment.ContentRootPath.StartsWith(x.Name, StringComparison.OrdinalIgnoreCase));
+                var info = new JsonObject
+                {
+                    ["freeSpace"] = driveInfo.AvailableFreeSpace,
+                    ["diskSize"] = driveInfo.TotalSize,
+                };
+                infos.Add("diskUsage", info);
+            }
+
+            if (parms.Contains("hgetver"))
+            {
+                var info = new JsonObject
+                {
+                    // Ignore the IntelliSense and first compilation error messages.
+                    // The compiler (MsBuild Target) will generate the corresponding code during the first compilation,
+                    // and the second compilation will pass.
+                    ["Version"] = VersionInfo.Version,
+                    ["GitLog"] = VersionInfo.GitLog,
+                    ["BuildDateTime"] = VersionInfo.BuildDateTime,
+                    ["Configuration"] = VersionInfo.Configuration,
+                };
+                infos.Add("hgetVer", info);
+            }
+
+            if (parms.Contains("playwright"))
+            {
+                infos.Add("playwrightVersion", await PwService.GetInstance().GetBrowserVersion());
+            }
+
+            if (parms.Contains("ytdl"))
+            {
+                infos.Add("ytdlVersion", await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), "--version"));
+            }
+
+            if (parms.Contains("ffmpeg"))
+            {
+                infos.Add("ffmpegVersion", await Utility.RunCmdFirstLine(Utils.FfmpegBinaryName, "-version"));
+            }
+
+            return infos;
         });
         #endregion
 

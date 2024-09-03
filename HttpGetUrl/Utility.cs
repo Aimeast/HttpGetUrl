@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Diagnostics;
+using System.Text.Json;
 
 namespace HttpGetUrl;
 
@@ -44,7 +45,7 @@ public static class Utility
         // Define invalid characters based on Windows, Linux, and macOS.
         // DO NOT call `Path.GetInvalidFileNameChars()`,
         // Because the array returned is different on different operating systems.
-        char[] invalidChars = [ '\\', '/', ':', '*', '?', '"', '<', '>', '|' ];
+        char[] invalidChars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
         var chars = fileName.ToCharArray();
         for (var i = 0; i < chars.Length; i++)
         {
@@ -64,5 +65,26 @@ public static class Utility
         string start = input.Substring(0, startLength);
         string end = input.Substring(input.Length - endLength, endLength);
         return $"{start}........{end}";
+    }
+
+    public static async Task<string> RunCmdFirstLine(string path, string args, bool wait = false)
+    {
+        var processStartInfo = new ProcessStartInfo
+        {
+            FileName = path,
+            Arguments = args,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using (var process = new Process { StartInfo = processStartInfo })
+        {
+            process.Start();
+            string output = await process.StandardOutput.ReadLineAsync();
+            process.WaitForExit();
+
+            return output.Trim();
+        }
     }
 }

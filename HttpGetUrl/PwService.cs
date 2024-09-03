@@ -77,4 +77,12 @@ public class PwService
             await browserContext.AddCookiesAsync([cookie]);
         }
     }
+
+    public async Task<string> GetBrowserVersion()
+    {
+        var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        var browserVersion = browser.Version;
+        await browser.CloseAsync();
+        return browserVersion;
+    }
 }
