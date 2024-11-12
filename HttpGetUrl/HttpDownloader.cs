@@ -1,141 +1,29 @@
-﻿using Microsoft.Extensions.FileProviders;
+﻿using System.Net.Http.Headers;
 
 namespace HttpGetUrl;
 
-public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
-    : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
+public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, configuration)
 {
-    private readonly Dictionary<string, string> mimes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Following is from https://chromium.googlesource.com/chromium/src/net/+/refs/heads/main/base/mime_util.cc
-        // git sha-1 9960e93b4bf52af6d1fa25ee1fa1bf4566eb7155
-        // kPrimaryMappings
-        {"video/webm", "webm"},
-        {"audio/mpeg", "mp3"},
-        {"application/wasm", "wasm"},
-        {"application/x-chrome-extension", "crx"},
-        {"application/xhtml+xml", "xhtml,xht,xhtm"},
-        {"audio/flac", "flac"},
-        {"audio/mp3", "mp3"},
-        {"audio/ogg", "ogg,oga,opus"},
-        {"audio/wav", "wav"},
-        {"audio/webm", "webm"},
-        {"audio/x-m4a", "m4a"},
-        {"image/avif", "avif"},
-        {"image/gif", "gif"},
-        {"image/jpeg", "jpeg,jpg"},
-        {"image/png", "png"},
-        {"image/apng", "png,apng"},
-        {"image/svg+xml", "svg,svgz"},
-        {"image/webp", "webp"},
-        {"multipart/related", "mht,mhtml"},
-        {"text/css", "css"},
-        {"text/html", "html,htm,shtml,shtm"},
-        {"text/javascript", "js,mjs"},
-        {"text/xml", "xml"},
-        {"video/mp4", "mp4,m4v"},
-        {"video/ogg", "ogv,ogm"},
-        {"text/csv", "csv"},
-
-        // kSecondaryMappings
-        {"image/x-icon", "ico"},
-        {"application/epub+zip", "epub"},
-        {"application/font-woff", "woff"},
-        {"application/gzip", "gz,tgz"},
-        {"application/javascript", "js"},
-        {"application/json", "json"},
-        {"application/msword", "doc,dot"},
-        //{"application/octet-stream", "bin,exe,com"}, // // already fallback
-        {"application/pdf", "pdf"},
-        {"application/pkcs7-mime", "p7m,p7c,p7z"},
-        {"application/pkcs7-signature", "p7s"},
-        {"application/postscript", "ps,eps,ai"},
-        {"application/rdf+xml", "rdf"},
-        {"application/rss+xml", "rss"},
-        {"application/rtf", "rtf"},
-        {"application/vnd.android.package-archive", "apk"},
-        {"application/vnd.mozilla.xul+xml", "xul"},
-        {"application/vnd.ms-excel", "xls"},
-        {"application/vnd.ms-powerpoint", "ppt"},
-        {"application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"},
-        {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"},
-        {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"},
-        {"application/x-gzip", "gz,tgz"},
-        {"application/x-mpegurl", "m3u8"},
-        {"application/x-shockwave-flash", "swf,swl"},
-        {"application/x-tar", "tar"},
-        {"application/x-x509-ca-cert", "cer,crt"},
-        {"application/zip", "zip"},
-        //{"audio/webm", "weba"}, //repeated
-        {"image/bmp", "bmp"},
-        //{"image/jpeg", "jfif,pjpeg,pjp"}, //repeated
-        {"image/tiff", "tiff,tif"},
-        {"image/vnd.microsoft.icon", "ico"},
-        {"image/x-png", "png"},
-        {"image/x-xbitmap", "xbm"},
-        {"message/rfc822", "eml"},
-        {"text/calendar", "ics"},
-        //{"text/html", "ehtml"}, //repeated
-        {"text/plain", "txt,text"},
-        {"text/x-sh", "sh"},
-        //{"text/xml", "xsl,xbl,xslt"}, //repeated
-        {"video/mpeg", "mpeg,mpg"},
-
-        // Following is from https://github.com/samuelneff/MimeTypeMap/blob/master/MimeTypeMap.cs and filtered out duplicates
-        // git sha-1 264181894cb43ce468f2413478eb25c1ed381235
-        {"application/fsharp-script", "fsx"},
-        {"application/msaccess", "adp"},
-        {"application/octet-stream", "bin"},
-        {"application/onenote", "one"},
-        {"application/step", "step"},
-        {"application/vnd.apple.keynote", "key"},
-        {"application/vnd.apple.numbers", "numbers"},
-        {"application/vnd.apple.pages", "pages"},
-        {"application/vnd.ms-works", "wks"},
-        {"application/vnd.visio", "vsd"},
-        {"application/x-director", "dir"},
-        {"application/x-msdos-program", "exe"},
-        {"application/x-zip-compressed", "zip"},
-        {"application/x-iwork-keynote-sffkey", "key"},
-        {"application/x-iwork-numbers-sffnumbers", "numbers"},
-        {"application/x-iwork-pages-sffpages", "pages"},
-        {"application/xml", "xml"},
-        {"audio/aac", "acc"},
-        {"audio/aiff", "aiff"},
-        {"audio/basic", "snd"},
-        {"audio/mid", "midi"},
-        {"audio/mp4", "m4a"},
-        {"audio/ogg;codecs=opus", "opus"},
-        {"audio/x-mpegurl", "m3u"},
-        {"audio/x-pn-realaudio", "ra"},
-        {"audio/x-smd", "smd"},
-        {"image/heic", "heic"},
-        {"image/heif", "heif"},
-        {"image/pict", "pic"},
-        {"image/x-macpaint", "mac"},
-        {"image/x-quicktime", "qti"},
-        {"text/scriptlet", "wsc"},
-        {"video/3gpp", "3gp"},
-        {"video/3gpp2", "3gp2"},
-        {"video/quicktime", "mov"},
-        {"video/vnd.dlna.mpeg-tts", "m2t"},
-        {"video/x-dv", "dv"},
-        {"video/x-la-asf", "lsf"},
-        {"video/x-ms-asf", "asf"},
-        {"x-world/x-vrml", "xof"},
-    };
-    private HttpClient httpClient = null;
     private HttpResponseMessage httpResponseMessage = null;
+
+    public RangeItemHeaderValue RequestRange { get; set; }
 
     public override async Task Analysis()
     {
         var httpClient = CreateHttpClient();
-        if (referrer != null)
-            httpClient.DefaultRequestHeaders.Referrer = referrer;
+        if (CurrentTask.Referrer != null)
+            httpClient.DefaultRequestHeaders.Referrer = CurrentTask.Referrer;
+        if (RequestRange != null)
+        {
+            httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue();
+            httpClient.DefaultRequestHeaders.Range.Ranges.Add(RequestRange);
+        }
 
-        httpResponseMessage = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, CancellationTokenSource.Token);
+        httpResponseMessage = await httpClient.GetAsync(CurrentTask.Url, HttpCompletionOption.ResponseHeadersRead, CancellationTokenSource.Token);
         httpResponseMessage.EnsureSuccessStatusCode();
 
+        var contentLength = httpResponseMessage.Content.Headers.ContentLength ?? -1;
         var filename = httpResponseMessage.Content.Headers.ContentDisposition?.FileName?.Trim('"') ?? "";
         if (string.IsNullOrEmpty(filename))
         {
@@ -148,7 +36,7 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
             var mediaType = httpResponseMessage.Content.Headers.ContentType?.MediaType;
             if (mediaType != "application/octet-stream" || string.IsNullOrEmpty(ext))
             {
-                if (mediaType != null && mimes.TryGetValue(mediaType, out ext))
+                if (mediaType != null && Utility.Mimes.TryGetValue(mediaType, out ext))
                     ext = "." + ext.Split(',')[0];
                 else
                     ext = ".bin";
@@ -156,32 +44,37 @@ public class HttpDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, 
                     filename += ext;
             }
         }
-        if (FinalFileNames.Length == 0)
-            FinalFileNames = [filename];
-        EstimatedContentLength = httpResponseMessage.Content.Headers.ContentLength ?? -1;
+        CurrentTask.FileName ??= filename;
+        CurrentTask.EstimatedLength = contentLength;
+        _taskCache.SaveTaskStatusDeferred(CurrentTask);
     }
 
-    public override async Task<long> Download()
+    public override async Task Download()
     {
-        var filePath = WorkingFolder.GetFileInfo(FinalFileNames[0]).PhysicalPath;
-        using (var fileStream = File.Create(filePath))
+        var isTimeout = false;
+        var timeout = 20_000;
+        var timeoutCancelSource = new CancellationTokenSource(timeout);
+        timeoutCancelSource.Token.Register(() => isTimeout = true);
+        var linkedCancelSource = CancellationTokenSource
+            .CreateLinkedTokenSource(CancellationTokenSource.Token, timeoutCancelSource.Token);
+        try
         {
-            await httpResponseMessage.Content.CopyToAsync(fileStream, CancellationTokenSource.Token);
-            return fileStream.Length;
+            var bytesRead = 0;
+            var buffer = new byte[16 * 1024];
+            using var responseStream = await httpResponseMessage.Content.ReadAsStreamAsync(linkedCancelSource.Token);
+            using var fileStream = _storageService.OpenFileStream(CurrentTask.TaskId, CurrentTask.FileName);
+            while ((bytesRead = await responseStream.ReadAsync(buffer, linkedCancelSource.Token)) > 0)
+            {
+                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead));
+                CurrentTask.DownloadedLength += bytesRead;
+                _taskCache.SaveTaskStatusDeferred(CurrentTask);
+                timeoutCancelSource.CancelAfter(timeout);
+            }
         }
-    }
-
-    public override Task<long> Merge()
-    {
-        throw new InvalidOperationException($"Merge not supported by {nameof(HttpDownloader)}.");
-    }
-
-    public override void Dispose()
-    {
-        httpResponseMessage?.Dispose();
-        httpClient?.Dispose();
-
-        httpResponseMessage = null;
-        httpClient = null;
+        catch (OperationCanceledException)
+        {
+            if (isTimeout) throw new TimeoutException($"Timeout in {timeout}ms.");
+            else throw;
+        }
     }
 }

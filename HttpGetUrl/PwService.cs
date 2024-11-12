@@ -2,61 +2,40 @@
 
 namespace HttpGetUrl;
 
-public class PwService
+public class PwService(IConfiguration configuration, StorageService storageService)
 {
-    private static PwService instance;
+    private readonly string _proxy = configuration.GetValue<string>("Hget:Proxy");
+    private readonly Token[] _tokens = storageService.GetTokens();
+    private readonly string _userDataDir = storageService.GetUserDataDir();
 
-    private IPlaywright playwright;
-    private IBrowserContext browserContext;
+    private IPlaywright _playwright;
+    private IBrowserContext _browserContext;
 
-    private PwService() { }
-
-    public static void InitService(PwOptions pwOptions)
+    public async Task InitializeAsync()
     {
-        var f = false;
-        lock (typeof(PwService))
-        {
-            if (instance == null)
-            {
-                f = true;
-                instance = new PwService();
-            }
-        }
-        if (f)
-            _ = Task.Factory.StartNew(async () =>
-            {
-                instance.playwright = await Playwright.CreateAsync();
-                var contextOptions = new BrowserTypeLaunchPersistentContextOptions { Headless = true };
-                if (!string.IsNullOrEmpty(pwOptions.Proxy))
-                    contextOptions.Proxy = new Proxy { Server = pwOptions.Proxy };
-                instance.browserContext = await instance.playwright.Chromium
-                    .LaunchPersistentContextAsync(pwOptions.UserDataDir, contextOptions)
-                    .ConfigureAwait(false);
-                await instance.UpdateTokesAsync(ContentDownloader.PwOptions.Tokens);
-            });
+        _playwright = await Playwright.CreateAsync();
+        var contextOptions = new BrowserTypeLaunchPersistentContextOptions { Headless = true };
+        if (!string.IsNullOrEmpty(_proxy))
+            contextOptions.Proxy = new Proxy { Server = _proxy };
+        _browserContext = await _playwright.Chromium
+            .LaunchPersistentContextAsync(_userDataDir, contextOptions);
+        await UpdateTokesAsync(_tokens);
     }
 
-    public static PwService GetInstance()
+    public async Task CloseAsync()
     {
-        ArgumentNullException.ThrowIfNull(instance, nameof(instance));
-        return instance;
-    }
-
-    public static void Close()
-    {
-        instance?.playwright.Dispose();
-        instance?.browserContext.CloseAsync().Wait();
-        instance = null;
+        await _browserContext.CloseAsync();
+        _playwright.Dispose();
     }
 
     public Task<IPage> NewPageAsync()
     {
-        return browserContext.NewPageAsync();
+        return _browserContext.NewPageAsync();
     }
 
     public Task AddCookieAsync(Cookie cookie)
     {
-        return browserContext.AddCookiesAsync([cookie]);
+        return _browserContext.AddCookiesAsync([cookie]);
     }
 
     public async Task UpdateTokesAsync(Token[] tokens)
@@ -72,15 +51,12 @@ public class PwService
             Secure = true,
             SameSite = SameSiteAttribute.None,
         });
-        foreach (var cookie in cookies)
-        {
-            await browserContext.AddCookiesAsync([cookie]);
-        }
+        await _browserContext.AddCookiesAsync(cookies);
     }
 
-    public async Task<string> GetBrowserVersion()
+    public async Task<string> GetBrowserVersionAsync()
     {
-        var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        var browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
         var browserVersion = browser.Version;
         await browser.CloseAsync();
         return browserVersion;

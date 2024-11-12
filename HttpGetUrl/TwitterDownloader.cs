@@ -1,20 +1,20 @@
-﻿using Microsoft.Extensions.FileProviders;
-using Microsoft.Playwright;
+﻿using Microsoft.Playwright;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace HttpGetUrl;
 
 [Downloader("Twitter", ["x.com", "t.co"])]
-public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
-    : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
+public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration, PwService pwService)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, configuration)
 {
-    ContentDownloader[] backDownloaders = null;
+    private readonly PwService _pwService = pwService;
 
     public override async Task Analysis()
     {
+        var urls = new List<string>();
         var tcs = new TaskCompletionSource();
-        var page = await PwService.GetInstance().NewPageAsync();
+        var page = await _pwService.NewPageAsync();
         page.Response += async (_, response) =>
         {
             if (CancellationTokenSource.IsCancellationRequested)
@@ -29,21 +29,20 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
                 var responseBody = await response.TextAsync();
                 var doc = JsonDocument.Parse(responseBody);
 
-                var urlNodes = doc.RootElement.SearchJson("extended_entities").SearchJson("variants").Select(x => x.SearchJson("url").LastOrDefault()).ToArray();
-                backDownloaders = new ContentDownloader[urlNodes.Length];
+                var urlNodes = doc.RootElement.SearchJson("entries").First()[0].SearchJson("legacy").SearchJson("extended_entities").SearchJson("video_info").Select(x => x.SearchJson("url").LastOrDefault()).ToArray();
                 for (var i = 0; i < urlNodes.Length; i++)
                 {
                     var node = urlNodes[i];
                     if (node.ValueKind == JsonValueKind.String)
                     {
                         var videoUrl = node.ToString();
-                        backDownloaders[i] = ForkToHttpDownloader(new Uri(videoUrl), null);
+                        urls.Add(videoUrl);
                     }
                 }
                 tcs.SetResult();
             }
         };
-        await page.GotoAsync(uri.ToString(), new PageGotoOptions
+        await page.GotoAsync(CurrentTask.Url.ToString(), new PageGotoOptions
         {
             Timeout = 60_000 * 5, // 5 minuts
             WaitUntil = WaitUntilState.DOMContentLoaded, // wait until the DOMContentLoaded event is fired, not all resources
@@ -51,36 +50,15 @@ public class TwitterDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
         await tcs.Task;
         await page.CloseAsync();
 
-        FinalFileNames = new string[backDownloaders.Length];
-        for (var i = 0; i < backDownloaders.Length; i++)
+        foreach (var url in urls)
         {
-            var downloader = backDownloaders[i];
-            await downloader.Analysis();
-            FinalFileNames[i] = downloader.FinalFileNames[0];
-            EstimatedContentLength += downloader.EstimatedContentLength;
+            var downloader = ForkToHttpDownloader(new Uri(url));
+            _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.TaskId, downloader.CurrentTask.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
         }
     }
 
-    public override async Task<long> Download()
+    public override async Task Download()
     {
-        var lengths = await Task.WhenAll(backDownloaders.Select(x => x.Download()));
-        return lengths.Sum();
-    }
-
-    public override Task<long> Merge()
-    {
-        throw new InvalidOperationException($"Merge not supported by {nameof(TwitterDownloader)}.");
-    }
-
-    public override void Dispose()
-    {
-        if (backDownloaders != null)
-        {
-            foreach (var downloader in backDownloaders)
-            {
-                downloader.Dispose();
-            }
-        }
-        backDownloaders = null;
+        await Task.CompletedTask;
     }
 }

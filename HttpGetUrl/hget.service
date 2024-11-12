@@ -4,8 +4,8 @@
 Description=Http Get Url to Local Disk
 
 [Service]
-WorkingDirectory=/usr/local/etc/hget
-ExecStart=/usr/bin/dotnet /usr/local/etc/hget/HttpGetUrl.dll
+WorkingDirectory=/usr/local/hget
+ExecStart=/usr/bin/dotnet /usr/local/hget/HttpGetUrl.dll
 Restart=always
 RestartSec=3
 

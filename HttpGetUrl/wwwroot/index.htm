@@ -69,10 +69,8 @@
             <table class="table table-responsive-stack table-striped mt-3">
                 <thead>
                     <tr>
-                        <th>Datetime</th>
-                        <th>Files</th>
-                        <th>Size</th>
-                        <th>Url</th>
+                        <th>TaskId</th>
+                        <th>Metadata</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -125,7 +123,7 @@
                 return `${size.toFixed(Math.min(unitIndex, 1))}${units[unitIndex]}`;
             }
 
-            function truncateUrl(url, maxLength = 90) {
+            function truncateUrl(url, maxLength = 100) {
                 if (url.length <= maxLength) {
                     return url;
                 }
@@ -134,7 +132,7 @@
                 return `${origin}/......${truncatedPart}`;
             }
 
-            function truncateText(text, maxLength = 70) {
+            function truncateText(text, maxLength = 200) {
                 if (text.length <= maxLength) {
                     return text;
                 }
@@ -162,21 +160,19 @@
                     case 1: return '\ud83d\udd75\u2753';// NotFound
                     case 2: return '\u23f3';            // Downloading
                     case 3: return '\ud83d\udee0';      // Merging
-                    case 4: return '\u2705';            // Completed
+                    case 4: return '\ud83d\udd36';      // PartiallyCompleted
+                    case 5: return '\u2705';            // Completed
                     default: return '\u274c';           // Error -1
                 }
             }
 
-            function getCircledNumber(num) {
-                const circledNumbers = [
-                    '\u2460', '\u2461', '\u2462', '\u2463', '\u2464', '\u2465', '\u2466', '\u2467', '\u2468', '\u2469', //  1~10
-                    '\u246A', '\u246B', '\u246C', '\u246D', '\u246E', '\u246F', '\u2470', '\u2471', '\u2472', '\u2473', // 11~20
-                    '\u3251', '\u3252', '\u3253', '\u3254', '\u3255', '\u3256', '\u3257', '\u3258', '\u3259', '\u325A', // 21~30
-                    '\u325B', '\u325C', '\u325D', '\u325E', '\u325F', '\u32B1', '\u32B2', '\u32B3', '\u32B4', '\u32B5', // 31~40
-                    '\u32B6', '\u32B7', '\u32B8', '\u32B9', '\u32BA', '\u32BB', '\u32BC', '\u32BD', '\u32BE', '\u32BF', // 41~50
-                ];
-
-                return (1 <= num && num <= circledNumbers.length) ? circledNumbers[num - 1] : `:${num}:`;
+            function htmlEscape(str) {
+                return str
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
             }
 
             // Api url
@@ -186,37 +182,47 @@
             // Request Functions
             function refreshTable() {
                 hideError();
-                $.get(apiUrl, function (data) {
+                $.get(apiUrl, function (taskItem) {
                     $('#table-body').empty();
-                    data.forEach(function (item) {
-                        var seq = item.files.length > 1 ? 1 : 0;
-                        var fileline = '';
-                        item.files.forEach(function (file) {
-                            if (seq > 0) fileline += `${getCircledNumber(seq++)}`;
-                            fileline += `<a target="_blank" href="./hg-${item.dateTime}/${encodeURIComponent(file)}">${file}</a><br/>`
+                    taskItem.forEach(function (item) {
+                        var seq = 0;
+                        var filelines = '';
+                        item.forEach(function (file) {
+                            if (file.isHide)
+                                return;
+                            filelines +=
+                                `<tr>
+                                    <td data-label="\u2116">${++seq}</td>
+                                    <td data-label="File">${mapStatusToEmoji(file.status)}<a target="_blank" href="./hg-${file.taskId}/${encodeURIComponent(file.fileName)}">${file.fileName ?? ''}</a> ${file.errorMessage ?? ''}</td>
+                                    <td data-label="Size">${calcSizeText(file)}</td>
+                                </tr>`;
                         });
-                        if (seq)
-                            fileline += `<button class="btn btn-light copylink-btn">Copy Links</button>`;
+                        var subtable =
+                            `<div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>&#x2116;</th>
+                                            <th>File</th>
+                                            <th>Size</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    ${filelines}
+                                    </tbody>
+                                </table>
+                                ${seq > 1 ? '<button class="btn btn-sm btn-light copylink-btn">Copy Links</button>' : ''}
+                            </div>`;
                         $('#table-body').append(
                             `<tr>
-                                <td data-label="Datetime">${item.dateTime}</td>
-                                <td data-label="Files">${mapStatusToEmoji(item.status)}<br/>${fileline} ${item.errorMessage ?? ''}</td>
-                                <td data-label="Size">${calcSizeText(item)}</td>
-                                <td data-label="Url" title="${item.url}"><a target="_blank" href="${item.url}">${truncateUrl(item.url)}</a></td>
-                                <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-datetime="${item.dateTime}" data-files="${item.files.join(',')}">Delete</button></td>
+                                <td data-label="TaskId">${item[0].taskId}</td>
+                                <td><div><a target="_blank" href="${item[0].url}">${truncateUrl(item[0].url)}</a> ${item[0].errorMessage ?? ''} ${subtable}</div></td>
+                                <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-taskid="${item[0].taskId}" data-files="${htmlEscape(item.filter(x => !x.isHide).map(x => x.fileName).join(','))}">Delete</button></td>
                             </tr>`
                         );
                     });
-                    $('.copylink-btn').off('click').on('click', function () {
-                        const td = $(this).closest('td');
-                        var links = '';
-                        td.find('a').each(function () {
-                            const relativeUrl = $(this).attr('href');
-                            const absoluteUrl = new URL(relativeUrl, window.location.href).href;
-                            links += absoluteUrl + '\n';
-                        });
-                        navigator.clipboard.writeText(links);
-                    });
+                    $('.copylink-btn').off('click').on('click', handleCopyLinks);
+                    $('.delete-btn').off('click').on('click', handleDelete);
                 }).fail(function (jqXHR, textStatus, errorThrown) {
                     showError(`Failed to refresh data: ${textStatus} - ${errorThrown}`);
                 });
@@ -244,15 +250,26 @@
                 });
             }
 
+            function handleCopyLinks() {
+                const td = $(this).closest('td').find('table');
+                var links = '';
+                td.find('a').each(function () {
+                    const relativeUrl = $(this).attr('href');
+                    const absoluteUrl = new URL(relativeUrl, window.location.href).href;
+                    links += absoluteUrl + '\n';
+                });
+                navigator.clipboard.writeText(links);
+            }
+
             function handleDelete() {
-                const datetime = $(this).data('datetime');
+                const taskId = $(this).data('taskid');
                 const files = $(this).data('files');
-                if (confirm(`Are you sure you want to delete this item?\nDatetime: ${datetime}\nFiles: ${files}`)) {
+                if (confirm(`Are you sure you want to delete this item?\nTaskId: ${taskId}\nFiles: ${truncateText(files)}`)) {
                     $.ajax({
-                        url: `${apiUrl}?datetime=${datetime}`,
+                        url: `${apiUrl}?taskId=${taskId}`,
                         type: 'DELETE',
                         success: function (response) {
-                            console.log(`Data deleted: ${datetime}`, response);
+                            console.log(`Data deleted: ${taskId}`, response);
                             refreshTable();
                         },
                         error: function (jqXHR, textStatus, errorThrown) {
@@ -270,7 +287,8 @@
                 $('#refresh').click(refreshTable);
                 $('#clear-url').click(handleClearUrl);
                 $('#clear-referrer').click(handleClearReferrer);
-                $(document).on('click', '.delete-btn', handleDelete);
+                $(document).on('visibilitychange', function () { !document.hidden && refreshTable(); });
+                setInterval(refreshTable, 15000);
 
                 // Automatically refresh table on page load
                 refreshTable();
