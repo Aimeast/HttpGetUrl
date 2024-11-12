@@ -1,5 +1,4 @@
 ﻿using FFMpegCore;
-using Microsoft.Extensions.FileProviders;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Metadata;
 using YoutubeDLSharp.Options;
@@ -7,46 +6,95 @@ using YoutubeDLSharp.Options;
 namespace HttpGetUrl;
 
 [Downloader("Youtube", ["youtube.com", "youtu.be"])]
-public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolder, CancellationTokenSource cancellationTokenSource)
-    : ContentDownloader(uri, referrer, workingFolder, cancellationTokenSource)
+public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, configuration)
 {
-    ContentDownloader[] backDownloaders = null;
-    string videoContainerName, videoId;
-    bool isPlaylist = false;
+    private static readonly Dictionary<string, int> _codecRank = new()
+    {
+        {"av01", 3},
+        {"vp09", 2},
+        {"vp9", 2},
+        {"avc1", 1},
+    };
 
-    private async Task<RunResult<VideoData>> FetchVideo(string url)
+    private async Task<RunResult<VideoData>> FetchVideoAsync(string url)
     {
         var ytdl = new YoutubeDL { YoutubeDLPath = Path.Combine(".hg", Utils.YtDlpBinaryName) };
-        var options = new OptionSet
-        {
-            Proxy = PwOptions.Proxy,
-        };
+        var options = new OptionSet { Proxy = _proxy, Cookies = Path.Combine(".hg", "tokens.txt") };
 
         var result = await ytdl.RunVideoDataFetch(url, ct: CancellationTokenSource.Token, overrideOptions: options);
-        result.EnsureSuccess();
 
         return result;
     }
 
     public override async Task Analysis()
     {
-        var result = await FetchVideo(uri.ToString());
-
-        isPlaylist = result.Data.Entries != null;
+        var result = await FetchVideoAsync(CurrentTask.Url.ToString());
+        var isPlaylist = result.Data?.Entries != null;
         if (isPlaylist)
-            await AnalysisPlayList(result.Data.Entries);
+            AnalysisPlayList(result.Data.Entries);
         else
-            await AnalysisVideo(result.Data);
+        {
+            var virtualTask = AddVirtualTask(result.Data?.Title);
+            if (result.Success)
+            {
+                var meta = AnalysisVideo(result.Data);
+                var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq, async () => await ExecDownloadAsync(meta, virtualTask), CancellationTokenSource);
+                _taskService.QueueTask(info);
+            }
+            else
+            {
+                virtualTask.ErrorMessage = string.Join('\n', result.ErrorOutput);
+                _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Error);
+            }
+        }
     }
 
-    private async Task AnalysisVideo(VideoData data)
+    private void AnalysisPlayList(IEnumerable<VideoData> entries)
+    {
+        foreach (var videoData in entries)
+        {
+            if (videoData.Duration == null)
+                continue;
+
+            var virtualTask = AddVirtualTask(videoData.Title);
+            var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq, async () =>
+            {
+                _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Downloading);
+                var result = await FetchVideoAsync(videoData.Url.ToString());
+                if (result.Success)
+                {
+                    var meta = AnalysisVideo(result.Data);
+                    await ExecDownloadAsync(meta, virtualTask);
+                }
+                else
+                {
+                    virtualTask.ErrorMessage = string.Join('\n', result.ErrorOutput);
+                    _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Error);
+                }
+            }, CancellationTokenSource);
+            _taskService.QueueTask(info);
+        }
+    }
+
+    private TaskFile AddVirtualTask(string title)
+    {
+        // virtual task for show file line on web UI
+        var virtualTask = _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
+        virtualTask.FileName = $"{title}";
+        virtualTask.IsVirtual = true;
+        _taskCache.SaveTaskStatusDeferred(virtualTask);
+        return virtualTask;
+    }
+
+    private VideoMeta AnalysisVideo(VideoData data)
     {
         // youtube_formats: https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
         var formats = data.Formats.Where(x => x.FileSize != null);
         // domain manifest.googlevideo.com means a DASH format that it's complicated
         var bestVideo = formats.Where(x => x.VideoCodec != "none" && !x.Url.Contains("manifest.googlevideo.com"))
             .OrderByDescending(x => x.Quality)
-            .ThenBy(x => x.FileSize)
+            .ThenBy(x => _codecRank[x.VideoCodec.Split('.')[0]])
             .First();
         var bestAudio = formats.Where(x => x.AudioCodec != "none" && !x.Url.Contains("manifest.googlevideo.com"))
             .Select(x => { if (x.Extension == "m4a") x.Extension = "mp4"; return x; })
@@ -55,87 +103,61 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
             .ThenBy(x => x.FileSize)
             .First();
 
-        videoId = data.ID;
-        videoContainerName = bestVideo.Extension;
-        if (bestVideo == bestAudio)
+        var meta = new VideoMeta()
         {
-            backDownloaders = [ForkToHttpDownloader(new Uri(bestVideo.Url), null)];
+            VideoId = data.ID,
+            Title = Utility.MakeValidFileName(data.Title),
+            ContainerName = bestVideo.Extension,
+            VideoUrl = bestVideo.Url,
+            AudioUrl = bestVideo != bestAudio ? bestAudio.Url : null,
+        };
+        return meta;
+    }
+
+    private async Task ExecDownloadAsync(VideoMeta meta, TaskFile virtualTask)
+    {
+        virtualTask.FileName = $"{meta.Title}.{meta.ContainerName}";
+        _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Downloading);
+
+        var d1 = ForkToHttpDownloader(new Uri(meta.VideoUrl));
+        d1.CurrentTask.ParentSeq = virtualTask.Seq;
+        d1.CurrentTask.IsHide = true;
+        d1.CurrentTask.FileName = $"{meta.VideoId}-video.{meta.ContainerName}";
+        var d2 = ForkToHttpDownloader(new Uri(meta.AudioUrl));
+        d2.CurrentTask.ParentSeq = virtualTask.Seq;
+        d2.CurrentTask.IsHide = true;
+        d2.CurrentTask.FileName = $"{meta.VideoId}-audio.{meta.ContainerName}";
+
+        var task1 = d1.ExecuteDownloadProcessAsync();
+        var task2 = d2.ExecuteDownloadProcessAsync();
+        await Task.WhenAll(task1, task2);
+        if (d1.CurrentTask.Status != TaskStatus.Error && d2.CurrentTask.Status != TaskStatus.Error)
+        {
+            _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Merging);
+            try
+            {
+                await MergeAsync(virtualTask.TaskId, meta.VideoId, meta.Title, meta.ContainerName);
+                var partially = d1.CurrentTask.Status == TaskStatus.PartiallyCompleted || d2.CurrentTask.Status == TaskStatus.PartiallyCompleted;
+                _taskCache.SaveTaskStatusDeferred(virtualTask, partially ? TaskStatus.PartiallyCompleted : TaskStatus.Completed);
+            }
+            catch (Exception ex)
+            {
+                virtualTask.ErrorMessage = $"{ex.GetType().Name}: {Utility.TruncateString(ex.Message, 100, 200)}.";
+                _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Error);
+            }
         }
         else
         {
-            var n1 = $"{videoId}-video.{videoContainerName}";
-            var n2 = $"{videoId}-audio.{videoContainerName}";
-            var d1 = ForkToHttpDownloader(new Uri(bestVideo.Url), null);
-            var d2 = ForkToHttpDownloader(new Uri(bestAudio.Url), null);
-            d1.FinalFileNames = [n1];
-            d2.FinalFileNames = [n2];
-            backDownloaders = [d1, d2];
-            FragmentFileNames = [n1, n2];
-        }
-        FinalFileNames = [$"{Utility.MakeValidFileName(data.Title)}.{videoContainerName}"];
-
-        foreach (var downloader in backDownloaders)
-        {
-            await downloader.Analysis();
-            EstimatedContentLength += downloader.EstimatedContentLength;
+            _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Error);
         }
     }
 
-    private async Task AnalysisPlayList(IEnumerable<VideoData> entries)
+    private async Task MergeAsync(string taskId, string videoId, string title, string containerName)
     {
-        var downloaders = new List<ContentDownloader>();
-        var fragments = new List<string>();
-        var finalFiles = new List<string>();
-        foreach (var videoData in entries)
-        {
-            if (videoData.Duration == null)
-                continue;
-            var downloader = new YoutubeDownloader(new Uri(videoData.Url), uri, WorkingFolder, CancellationTokenSource);
-            try
-            {
-                await downloader.Analysis();
-                await Task.Delay(Random.Shared.Next(30_000, 60_000));
-            }
-            catch
-            {
-                continue;
-            }
-            downloaders.Add(downloader);
-            fragments.AddRange(downloader.FragmentFileNames);
-            finalFiles.Add(downloader.FinalFileNames[0]);
-            EstimatedContentLength += downloader.EstimatedContentLength;
-        }
-        backDownloaders = downloaders.ToArray();
-        FragmentFileNames = fragments.ToArray();
-        FinalFileNames = finalFiles.ToArray();
-    }
-
-    public override async Task<long> Download()
-    {
-        var length = 0L;
-        for (var i = 0; i < backDownloaders.Length; i++)
-        {
-            if (i % 3 == 2)
-                await Task.Delay(Random.Shared.Next(30_000, 100_000));
-            length += await backDownloaders[i].Download();
-        }
-        return length;
-    }
-
-    public override async Task<long> Merge()
-    {
-        if (isPlaylist)
-        {
-            var lengths = await Task.WhenAll(backDownloaders.Select(x => x.Merge()));
-            return lengths.Sum();
-        }
-
-        if (backDownloaders.Length == 1)
-            return -1;
-
-        string videoFilePath = WorkingFolder.GetFileInfo($"{videoId}-video.{videoContainerName}").PhysicalPath;
-        string audioFilePath = WorkingFolder.GetFileInfo($"{videoId}-audio.{videoContainerName}").PhysicalPath;
-        string outputFilePath = WorkingFolder.GetFileInfo($"{videoId}-output.{videoContainerName}").PhysicalPath;
+        var videoFilePath = _storageService.GetFilePath(taskId, $"{videoId}-video.{containerName}");
+        var audioFilePath = _storageService.GetFilePath(taskId, $"{videoId}-audio.{containerName}");
+        var outputFilePath = _storageService.GetFilePath(taskId, $"{videoId}-output.{containerName}");
+        var distFilePath = _storageService.GetFilePath(taskId, $"{title}.{containerName}");
 
         var result = await FFMpegArguments
             .FromFileInput(videoFilePath)
@@ -145,22 +167,22 @@ public class YoutubeDownloader(Uri uri, Uri referrer, IFileProvider workingFolde
                 .WithAudioCodec("copy"))
             .ProcessAsynchronously();
 
-        File.Move(outputFilePath, WorkingFolder.GetFileInfo(FinalFileNames[0]).PhysicalPath);
         File.Delete(videoFilePath);
         File.Delete(audioFilePath);
-
-        return WorkingFolder.GetFileInfo(FinalFileNames[0]).Length;
+        File.Move(outputFilePath, distFilePath);
     }
 
-    public override void Dispose()
+    public override async Task Download()
     {
-        if (backDownloaders != null)
-        {
-            foreach (var downloader in backDownloaders)
-            {
-                downloader.Dispose();
-            }
-        }
-        backDownloaders = null;
+        await Task.CompletedTask;
+    }
+
+    private class VideoMeta
+    {
+        public string VideoId { get; set; }
+        public string Title { get; set; }
+        public string ContainerName { get; set; }
+        public string VideoUrl { get; set; }
+        public string AudioUrl { get; set; }
     }
 }
