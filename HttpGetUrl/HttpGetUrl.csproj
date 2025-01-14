@@ -2,13 +2,13 @@
 
   <PropertyGroup>
     <Version>1.0.0</Version>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="FFMpegCore" Version="5.1.0" />
-    <PackageReference Include="Microsoft.Playwright" Version="1.47.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
     <PackageReference Include="YoutubeDLSharp" Version="1.1.1" />
   </ItemGroup>
 

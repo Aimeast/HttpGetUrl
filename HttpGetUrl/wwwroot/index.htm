@@ -187,6 +187,9 @@
                     taskItem.forEach(function (item) {
                         var seq = 0;
                         var filelines = '';
+                        if (item[0].contentText) {
+                            filelines += `<tr><td colspan="3">${item[0].contentText}</td></tr>`;
+                        }
                         item.forEach(function (file) {
                             if (file.isHide)
                                 return;

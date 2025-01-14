@@ -11,10 +11,12 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
 {
     private static readonly Dictionary<string, int> _codecRank = new()
     {
-        {"av01", 3},
-        {"vp09", 2},
-        {"vp9", 2},
-        {"avc1", 1},
+        // https://developer.mozilla.org/en-US/docs/Web/Media/Formats/codecs_parameter
+        // https://en.wikipedia.org/wiki/Container_format
+        {"avc1", 1}, // Advanced Video Coding / H.264, MPEG, Contained by .MP4 at youtube
+        {"av01", 2}, // AOMedia Video 1, Alliance for Open Media, Contained by .MP4 at youtube
+        {"vp09", 3}, // Video Processing 9, Google, Contained by .WebM at youtube
+        {"vp9", 3},  // same as vp09
     };
 
     private async Task<RunResult<VideoData>> FetchVideoAsync(string url)

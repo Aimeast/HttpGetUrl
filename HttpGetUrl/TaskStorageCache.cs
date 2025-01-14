@@ -10,17 +10,12 @@ public class TaskStorageCache(StorageService storageService)
 
     public TaskFile GetNextTaskItemSequence(string taskId)
     {
-        StringLock.LockString($"seq-{taskId}");
-        try
+        using (StringLock.LockString($"seq-{taskId}"))
         {
             var tasks = GetTaskItems(taskId);
             var taskItem = new TaskFile { TaskId = taskId, Seq = tasks.Length };
             SaveTaskStatusDeferred(taskItem);
             return taskItem;
-        }
-        finally
-        {
-            StringLock.ReleaseString($"seq-{taskId}");
         }
     }
 
@@ -35,8 +30,7 @@ public class TaskStorageCache(StorageService storageService)
     {
         if (status != null)
             task.Status = (TaskStatus)status;
-        StringLock.LockString($"task-{task.TaskId}");
-        try
+        using (StringLock.LockString($"task-{task.TaskId}"))
         {
             var tasks = GetTaskItems(task.TaskId);
             if (tasks == null)
@@ -49,24 +43,13 @@ public class TaskStorageCache(StorageService storageService)
             else
                 _statusToBeSavedDeferred.TryAdd(task.TaskId, tasks);
         }
-        finally
-        {
-            StringLock.ReleaseString($"task-{task.TaskId}");
-        }
         PluseSaveTask();
     }
 
     public void DeleteTask(string taskId)
     {
-        StringLock.LockString($"task-{taskId}");
-        try
-        {
+        using (StringLock.LockString($"task-{taskId}"))
             _statusToBeSavedDeferred.TryRemove(taskId, out _);
-        }
-        finally
-        {
-            StringLock.ReleaseString($"task-{taskId}");
-        }
 
         _storageService.DeleteTask(taskId);
     }
@@ -96,15 +79,10 @@ public class TaskStorageCache(StorageService storageService)
             while (!_statusToBeSavedDeferred.IsEmpty)
             {
                 var item = _statusToBeSavedDeferred.Values.First();
-                StringLock.LockString($"task-{item[0].TaskId}");
-                try
+                using (StringLock.LockString($"task-{item[0].TaskId}"))
                 {
                     _statusToBeSavedDeferred.Remove(item[0].TaskId, out _);
                     _storageService.SaveTasks(item);
-                }
-                finally
-                {
-                    StringLock.ReleaseString($"task-{item[0].TaskId}");
                 }
             }
             idleCount = 0;

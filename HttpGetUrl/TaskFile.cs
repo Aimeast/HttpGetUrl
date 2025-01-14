@@ -6,6 +6,7 @@ public class TaskFile
     public Uri Url { get; set; }
     public Uri Referrer { get; set; }
     public int Seq { get; set; }    // Start with 0
+    public string ContentText { get; set; }
     public string FileName { get; set; }    // null means no file name specified
     public long EstimatedLength { get; set; }   // -1 means unknown length.
     public long DownloadedLength { get; set; }

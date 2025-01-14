@@ -13,7 +13,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
 1. **Install dotnetcore**
    ```sh
    apt-get update
-   apt-get install -y aspnetcore-runtime-8.0
+   apt-get install -y aspnetcore-runtime-9.0
    ```
 
 2. **Prepare folders**
@@ -23,7 +23,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
 ### II. Compilation and Deployment
 
 3. **Compile**
-   Publish this project with the target framework `net8.0` and target runtime `linux-x64`.
+   Publish this project with the target framework `net9.0` and target runtime `linux-x64`.
 
 4. **Upload binaries**
    Upload all compiled binaries to the `/usr/local/hget` folder. Compress the `.playwright` directory (which contains numerous JS files) before uploading if necessary. Then grant execute permissions.
@@ -80,8 +80,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
 8. **Playwright.net**
    ```sh
    cd /usr/local/hget
-   pwsh playwright.ps1 install
-   pwsh playwright.ps1 install-deps
+   pwsh playwright.ps1 install --with-deps
    ```
 
 9. **yt-dlp**
@@ -90,6 +89,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
    wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
    chmod +x yt-dlp
    ```
+   If you're having parsing issues with yt-dlp, try updating `yt-dlp` via `yt-dlp -U`
 
 10. **ffmpeg**
     ```sh
@@ -111,8 +111,10 @@ Simply paste the resource URL and submit. The task will be automatically queued.
     ```txt
     # Single file download
     https://github.com/FFmpeg/FFmpeg/archive/refs/heads/master.zip
+
     # Twitter video download
     https://x.com/elonmusk/status/1851515326581916096
+
     # YouTube video and playlist download
     https://youtube.com/shorts/FUoB6xVTdE8
     https://youtube.com/playlist?list=PLOGi5-fAu8bGbCMgtuuNf8t-kV28ZhnGa

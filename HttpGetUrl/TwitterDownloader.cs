@@ -28,8 +28,21 @@ public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellati
             {
                 var responseBody = await response.TextAsync();
                 var doc = JsonDocument.Parse(responseBody);
+                var selectedJson = default(JsonElement);
+                var entriesJson = doc.RootElement.SearchJson("entries").First();
+                foreach (var entry in entriesJson.EnumerateArray())
+                {
+                    var entryType = entry.SearchJson("entryType").First().GetString();
+                    var entryId = entry.SearchJson("entryId").First().GetString();
+                    if (entryType == "TimelineTimelineItem" && entryId.StartsWith("tweet-"))
+                    {
+                        selectedJson = entry;
+                    }
+                }
+                var full_text = selectedJson.SearchJson("full_text").First().ToString();
+                var urlNodes = selectedJson.SearchJson("entities").SearchJson("video_info").Select(x => x.SearchJson("url").LastOrDefault()).ToArray();
 
-                var urlNodes = doc.RootElement.SearchJson("entries").First()[0].SearchJson("legacy").SearchJson("extended_entities").SearchJson("video_info").Select(x => x.SearchJson("url").LastOrDefault()).ToArray();
+                CurrentTask.ContentText = full_text;
                 for (var i = 0; i < urlNodes.Length; i++)
                 {
                     var node = urlNodes[i];

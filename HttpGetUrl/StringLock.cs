@@ -6,7 +6,7 @@ public static class StringLock
 {
     private static readonly ConcurrentDictionary<string, StringLockTuple> _lockDictionary = new();
 
-    public static void LockString(string str)
+    public static LockScope LockString(string str)
     {
         StringLockTuple tuple;
         lock (_lockDictionary)
@@ -15,9 +15,11 @@ public static class StringLock
             Interlocked.Increment(ref tuple.Count);
         }
         tuple.Semaphore.Wait();
+
+        return new LockScope(str);
     }
 
-    public static void ReleaseString(string str)
+    private static void ReleaseString(string str)
     {
         StringLockTuple tuple;
         lock (_lockDictionary)
@@ -33,5 +35,12 @@ public static class StringLock
     {
         public SemaphoreSlim Semaphore = new(1, 1);
         public int Count = 0;
+    }
+
+    public class LockScope(string str) : IDisposable
+    {
+        string _str = str;
+
+        public void Dispose() => ReleaseString(_str);
     }
 }

@@ -31,19 +31,15 @@ public class StorageService(IHostEnvironment hostEnvironment)
     {
         var jsonPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}", $".{taskId}.json");
         var content = "";
-        StringLock.LockString($"storage-{taskId}");
-        try
-        {
-            content = File.ReadAllText(jsonPath);
-        }
-        catch (Exception ex)
-        {
-            return null;
-        }
-        finally
-        {
-            StringLock.ReleaseString($"storage-{taskId}");
-        }
+        using (StringLock.LockString($"storage-{taskId}"))
+            try
+            {
+                content = File.ReadAllText(jsonPath);
+            }
+            catch (Exception ex)
+            {
+                return null;
+            }
         var item = JsonSerializer.Deserialize<TaskFile[]>(content);
         return item;
     }
@@ -53,15 +49,8 @@ public class StorageService(IHostEnvironment hostEnvironment)
         var taskId = tasks[0].TaskId;
         var jsonPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}", $".{taskId}.json");
         var content = JsonSerializer.Serialize(tasks);
-        StringLock.LockString($"storage-{taskId}");
-        try
-        {
+        using (StringLock.LockString($"storage-{taskId}"))
             File.WriteAllText(jsonPath, content);
-        }
-        finally
-        {
-            StringLock.ReleaseString($"storage-{taskId}");
-        }
     }
 
     public void DeleteTask(string taskId)
