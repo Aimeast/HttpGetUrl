@@ -41,7 +41,7 @@ public class DownloaderFactory
             }
         }
 
-        return CreateHttpDownloader(task, cancellationTokenSource);
+        return ActivatorUtilities.CreateInstance<YtdlpDownloader>(_serviceProvider, task, cancellationTokenSource);
     }
 
     public HttpDownloader CreateHttpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource = null)

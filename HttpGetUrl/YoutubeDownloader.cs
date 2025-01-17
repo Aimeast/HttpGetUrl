@@ -35,20 +35,17 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         var isPlaylist = result.Data?.Entries != null;
         if (isPlaylist)
             AnalysisPlayList(result.Data.Entries);
-        else
+        else if (result.Success)
         {
             var virtualTask = AddVirtualTask(result.Data?.Title);
-            if (result.Success)
-            {
-                var meta = AnalysisVideo(result.Data);
-                var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq, async () => await ExecDownloadAsync(meta, virtualTask), CancellationTokenSource);
-                _taskService.QueueTask(info);
-            }
-            else
-            {
-                virtualTask.ErrorMessage = string.Join('\n', result.ErrorOutput);
-                _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Error);
-            }
+            var meta = AnalysisVideo(result.Data);
+            var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq,
+                async () => await ExecDownloadAsync(meta, virtualTask), CancellationTokenSource);
+            _taskService.QueueTask(info);
+        }
+        else
+        {
+            throw new Exception(string.Join('\n', result.ErrorOutput));
         }
     }
 

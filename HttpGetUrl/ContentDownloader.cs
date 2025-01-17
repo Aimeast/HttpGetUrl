@@ -51,6 +51,11 @@ public abstract class ContentDownloader(TaskFile task, CancellationTokenSource c
                 await Download();
                 _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Completed);
             }
+            catch (NotSupportedException ex) when (this is YtdlpDownloader)
+            {
+                var downloader = _downloaderFactory.CreateHttpDownloader(CurrentTask);
+                _ = downloader.ExecuteDownloadProcessAsync();
+            }
             catch (Exception ex) when
             ((ex is IOException || ex is TimeoutException) && this is HttpDownloader httpDownloader && times++ < 3)
             {
@@ -65,10 +70,11 @@ public abstract class ContentDownloader(TaskFile task, CancellationTokenSource c
         }
     }
 
-    public HttpDownloader ForkToHttpDownloader(Uri url)
+    public HttpDownloader ForkToHttpDownloader(Uri url, Uri referrer = null)
     {
         var newTask = _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
         newTask.Url = url;
+        newTask.Referrer = referrer;
         var http = _downloaderFactory.CreateHttpDownloader(newTask, CancellationTokenSource);
         http._httpClientHandler = _httpClientHandler;
         return http;

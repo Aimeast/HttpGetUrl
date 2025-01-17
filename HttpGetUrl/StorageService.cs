@@ -75,7 +75,7 @@ public class StorageService(IHostEnvironment hostEnvironment)
 
     public string GetFilePath(string taskId, string filename)
     {
-        var filePath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}", filename);
+        var filePath = Path.GetFullPath(Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}", filename));
         return filePath;
     }
 
