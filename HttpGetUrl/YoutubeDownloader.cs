@@ -37,7 +37,7 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
             AnalysisPlayList(result.Data.Entries);
         else if (result.Success)
         {
-            var virtualTask = AddVirtualTask(result.Data?.Title);
+            var virtualTask = AddVirtualTask(result.Data.Title);
             var meta = AnalysisVideo(result.Data);
             var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq,
                 async () => await ExecDownloadAsync(meta, virtualTask), CancellationTokenSource);

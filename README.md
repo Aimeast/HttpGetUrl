@@ -6,38 +6,59 @@
 
 Simply paste the resource URL and submit. The task will be automatically queued.
 
-## I. Installation on Ubuntu 24.04
+## I. Installation on Ubuntu 24.04 / Debian 12
 
 ### Preparing the Environment
 
-1. **Install dotnetcore**
+1. **Add the Microsoft package signing key**
+
    ```sh
-   apt-get update
-   apt-get install -y aspnetcore-runtime-9.0
+   # for ubuntu 24.04, required by powershell
+   wget -q https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+   # for debian 12, required by netcore-runtime and powershell
+   wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb
+
+   dpkg -i packages-microsoft-prod.deb
+   rm packages-microsoft-prod.deb
    ```
 
-2. **Prepare folders**
+2. **Install dotnetcore**
+
+   - aspnetcore-runtime-9.0: ASP.NET Core runtime
+   - powershell: for installing Playwright.net headless browser
+   - python3: as yt-dlp runtime
+   - ffmpeg: as codecs
+   - libmsquic: for turn on HTTP/3(QUIC)
+   ```sh
+   apt-get update
+   apt-get install -y aspnetcore-runtime-9.0 powershell python3 ffmpeg libmsquic
+   ```
+
+3. **Prepare folders**
    Assuming the installation directory is `/usr/local/hget`, prepare the following folders:
    - `/usr/local/hget/.hg` : Stores hget configurations, `Playwright.net` browser configurations, and the `yt-dlp` executable file.
 
 ### II. Compilation and Deployment
 
-3. **Compile**
+4. **Compile**
    Publish this project with the target framework `net9.0` and target runtime `linux-x64`.
 
-4. **Upload binaries**
+5. **Upload binaries**
    Upload all compiled binaries to the `/usr/local/hget` folder. Compress the `.playwright` directory (which contains numerous JS files) before uploading if necessary. Then grant execute permissions.
    ```sh
    cd /usr/local/hget/.playwright/node/linux-x64
    chmod +x node
    ```
 
-5. **Configuration file**
+6. **Configuration file**
    Configure the production environment in `appsettings.Production`. This is an example, you need to modify parameters as your appropriate.
    ```json
    {
      "https_port": 443,
      "Kestrel": {
+       "EndpointDefaults": {
+         "Protocols": "Http1AndHttp2AndHttp3"
+       },
        "Endpoints": {
          "Http": {
            "Url": "http://*:80"
@@ -58,24 +79,13 @@ Simply paste the resource URL and submit. The task will be automatically queued.
    }
    ```
 
-6. **Register service**
+7. **Register service**
    Copy `hget.service` from the code directory to `/etc/systemd/system/`, then run:
    ```sh
    systemctl enable hget
    ```
 
 ### III. Installing Components
-
-7. **PowerShell (for installing Playwright.net headless browser)**
-   ```sh
-   apt-get update
-   wget -q https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
-   dpkg -i packages-microsoft-prod.deb
-   rm packages-microsoft-prod.deb
-   apt-get update
-   apt-get install -y powershell
-   pwsh
-   ```
 
 8. **Playwright.net**
    ```sh
@@ -91,23 +101,18 @@ Simply paste the resource URL and submit. The task will be automatically queued.
    ```
    If you're having parsing issues with yt-dlp, try updating `yt-dlp` via `yt-dlp -U`
 
-10. **ffmpeg**
-    ```sh
-    apt-get install -y ffmpeg
-    ```
-
 ### IV. Testing
 
-11. **Test run**
+10. **Test run**
     ```sh
     cd /usr/local/hget/
     dotnet HttpGetUrl.dll
     ```
 
-12. **Update token**
+11. **Update token**
     Supports importing `cookie.json` files exported by the Firefox Cookie Manager plugin. Update cookies on the `/tokens.htm` page. Some resources require your login credentials to access them.
 
-13. **Try download urls**
+12. **Try download urls**
     ```txt
     # Single file download
     https://github.com/FFmpeg/FFmpeg/archive/refs/heads/master.zip
@@ -122,7 +127,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
 
 ### V. Start service
 
-14. **Everything is ready**
+13. **Everything is ready**
     ```sh
     systemctl start hget
     ```

@@ -7,7 +7,7 @@
     <link href="./bootstrap-5.3.0.min.css" rel="stylesheet">
     <script src="./jquery-3.7.1.min.js"></script>
     <style>
-        table, th, td {
+        .break {
             word-wrap: break-word;
             word-break: break-all;
         }
@@ -196,7 +196,7 @@
                             filelines +=
                                 `<tr>
                                     <td data-label="\u2116">${++seq}</td>
-                                    <td data-label="File">${mapStatusToEmoji(file.status)}<a target="_blank" href="./hg-${file.taskId}/${encodeURIComponent(file.fileName)}">${file.fileName ?? ''}</a> ${file.errorMessage ?? ''}</td>
+                                    <td data-label="File" class="break">${mapStatusToEmoji(file.status)}<a target="_blank" href="./hg-${file.taskId}/${encodeURIComponent(file.fileName)}">${file.fileName ?? ''}</a> ${file.errorMessage ?? ''}</td>
                                     <td data-label="Size">${calcSizeText(file)}</td>
                                 </tr>`;
                         });
@@ -219,7 +219,7 @@
                         $('#table-body').append(
                             `<tr>
                                 <td data-label="TaskId">${item[0].taskId}</td>
-                                <td><div><a target="_blank" href="${item[0].url}">${truncateUrl(item[0].url)}</a> ${item[0].errorMessage ?? ''} ${subtable}</div></td>
+                                <td><div><a target="_blank" class="break" href="${item[0].url}">${truncateUrl(item[0].url)}</a> ${item[0].errorMessage ?? ''} ${subtable}</div></td>
                                 <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-taskid="${item[0].taskId}" data-files="${htmlEscape(item.filter(x => !x.isHide).map(x => x.fileName).join(','))}">Delete</button></td>
                             </tr>`
                         );
@@ -230,7 +230,7 @@
                     showError(`Failed to refresh data: ${textStatus} - ${errorThrown}`);
                 });
                 $.get(apiInfo, function (data) {
-                    $('#infos').text(`FreeSpace: ${formatSize(data.diskUsage.freeSpace)} / DiskSize: ${formatSize(data.diskUsage.diskSize)}`);
+                    $('#infos').text(`FreeSpace: ${formatSize(data.diskUsage.freeSpace)} / DiskSize: ${formatSize(data.diskUsage.diskSize)}; Protocol: ${data.protocol}`);
                 });
             }
 
@@ -297,6 +297,7 @@
                 refreshTable();
             });
         })();
+        document.title += ' - ' + window.location.hostname;
     </script>
 </body>
 </html>

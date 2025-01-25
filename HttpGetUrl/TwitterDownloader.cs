@@ -57,7 +57,7 @@ public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellati
         };
         await page.GotoAsync(CurrentTask.Url.ToString(), new PageGotoOptions
         {
-            Timeout = 60_000 * 5, // 5 minuts
+            Timeout = 60_000 * 2, // 5 minuts
             WaitUntil = WaitUntilState.DOMContentLoaded, // wait until the DOMContentLoaded event is fired, not all resources
         });
         await tcs.Task;

@@ -43,12 +43,20 @@ public class Program
                 .UseHsts();
         }
 
-        app.MapGet("/task", ([FromServices] HgetApp hget) => hget.GetTaskItems());
-        app.MapPost("/task", (TaskFile task, [FromServices] HgetApp hget) => hget.CreateTask(task));
-        app.MapDelete("/task", (string taskId, [FromServices] HgetApp hget) => hget.DeleteTask(taskId));
-        app.MapGet("/tokens", ([FromServices] HgetApp hget) => hget.GetTokens());
-        app.MapPost("/tokens", async (Token[] tokens, [FromServices] HgetApp hget) => await hget.UpdateTokensAsync(tokens));
-        app.MapGet("/info", async (string q, [FromServices] HgetApp hget) => await hget.GetSystemInfoAsync(q));
+        app.MapGet("/task",
+            ([FromServices] HgetApp hget) => hget.GetTaskItems());
+        app.MapPost("/task",
+            ([FromServices] HgetApp hget, TaskFile task) => hget.CreateTask(task));
+        app.MapDelete("/task",
+            ([FromServices] HgetApp hget, string taskId) => hget.DeleteTask(taskId));
+        app.MapGet("/tokens",
+            ([FromServices] HgetApp hget) => hget.GetTokens());
+        app.MapPost("/tokens", async
+            ([FromServices] HgetApp hget, Token[] tokens) => await hget.UpdateTokensAsync(tokens));
+        app.MapGet("/info", async
+            ([FromServices] HgetApp hget, HttpContext context) => await hget.GetSystemInfoAsync(context));
+        app.MapGet("/upytdlp", async
+            ([FromServices] HgetApp hget) => await hget.UpgradeYtdlp());
 
         app.Run();
     }

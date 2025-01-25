@@ -90,13 +90,15 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
         await _pwService.UpdateTokesAsync(tokens);
     }
 
-    public async Task<JsonObject> GetSystemInfoAsync(string q)
+    public async ValueTask<JsonObject> GetSystemInfoAsync(HttpContext context)
     {
-        var parms = (string.IsNullOrWhiteSpace(q) ? "diskusage" : q)
-            .Split(',').Select(x => x.ToLower()).Distinct().OrderBy(x => x).ToArray();
+        var parms = context.Request.QueryString.Value.TrimStart('?').ToLower().Split(',').Distinct().ToArray();
         var infos = new JsonObject();
-        if (parms.Contains("diskusage"))
+
+        // Default infos
         {
+            infos.Add("protocol", context.Request.Protocol);
+
             var driveInfo = DriveInfo.GetDrives().FirstOrDefault(x => _storageService.GetContentRootPath().StartsWith(x.Name, StringComparison.OrdinalIgnoreCase));
             var info = new JsonObject
             {
@@ -143,5 +145,11 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
         }
 
         return infos;
+    }
+
+    public async ValueTask<string> UpgradeYtdlp()
+    {
+        await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), "-U", true);
+        return await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), "--version");
     }
 }

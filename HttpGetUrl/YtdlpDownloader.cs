@@ -22,15 +22,16 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
     public override async Task Analysis()
     {
         var result = await FetchVideoDataAsync(CurrentTask.Url.ToString());
-        if (result.ErrorOutput.Any(x => x.Contains("No suitable extractor found")) || result.Data?.FormatID == "0")
+        if (result.Data == null || result.Data.FormatID == "0" // Unsupported url
+            || result.Data.Direct) // Direct url
             throw new NotSupportedException($"Ytdlp not support the Url '{CurrentTask.Url}'.");
 
-        _isPlaylist = result.Data?.Entries != null;
+        _isPlaylist = result.Data.Entries != null;
         if (_isPlaylist)
             AnalysisPlayList(result.Data.Entries);
         else if (result.Success)
         {
-            CurrentTask.FileName = result.Data?.Title;
+            CurrentTask.FileName = result.Data.Title;
             _taskCache.SaveTaskStatusDeferred(CurrentTask);
         }
         else

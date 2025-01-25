@@ -189,7 +189,7 @@ public static class Utility
         return $"{start}........{end}";
     }
 
-    public static async Task<string> RunCmdFirstLine(string path, string args, bool wait = false)
+    public static async ValueTask<string> RunCmdFirstLine(string path, string args, bool wait = false)
     {
         var processStartInfo = new ProcessStartInfo
         {
@@ -200,14 +200,15 @@ public static class Utility
             CreateNoWindow = true
         };
 
-        using (var process = new Process { StartInfo = processStartInfo })
-        {
-            process.Start();
-            string output = await process.StandardOutput.ReadLineAsync();
+        using var process = new Process { StartInfo = processStartInfo };
+        process.Start();
+        var output = await process.StandardOutput.ReadLineAsync();
+        if (wait)
             process.WaitForExit();
+        else
+            process.Close();
 
-            return output.Trim();
-        }
+        return output.Trim();
     }
 
     public static string FormatSize(long size)

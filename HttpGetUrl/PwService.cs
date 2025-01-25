@@ -5,41 +5,59 @@ namespace HttpGetUrl;
 public class PwService(IConfiguration configuration, StorageService storageService)
 {
     private readonly string _proxy = configuration.GetValue<string>("Hget:Proxy");
-    private readonly Token[] _tokens = storageService.GetTokens();
     private readonly string _userDataDir = storageService.GetUserDataDir();
 
     private IPlaywright _playwright;
     private IBrowserContext _browserContext;
+    private Lazy<Task<IBrowserContext>> _browserContextLazy;
 
     public async Task InitializeAsync()
     {
-        _playwright = await Playwright.CreateAsync();
-        var contextOptions = new BrowserTypeLaunchPersistentContextOptions { Headless = true };
-        if (!string.IsNullOrEmpty(_proxy))
-            contextOptions.Proxy = new Proxy { Server = _proxy };
-        _browserContext = await _playwright.Chromium
-            .LaunchPersistentContextAsync(_userDataDir, contextOptions);
-        await UpdateTokesAsync(_tokens);
+        _browserContextLazy = new(async () =>
+        {
+            var contextOptions = new BrowserTypeLaunchPersistentContextOptions { Headless = true };
+            if (!string.IsNullOrEmpty(_proxy))
+                contextOptions.Proxy = new Proxy { Server = _proxy };
+            _playwright = await Playwright.CreateAsync();
+            return await _playwright.Firefox.LaunchPersistentContextAsync(Path.Combine(_userDataDir, "firefox"), contextOptions);
+        });
+
+        await Task.CompletedTask;
+    }
+
+    private async Task InternalInit()
+    {
+        _browserContext ??= await _browserContextLazy.Value;
     }
 
     public async Task CloseAsync()
     {
-        await _browserContext.CloseAsync();
-        _playwright.Dispose();
+        if (_browserContext != null)
+        {
+            await _browserContext.CloseAsync();
+            _playwright.Dispose();
+        }
     }
 
-    public Task<IPage> NewPageAsync()
+    public async Task<IPage> NewPageAsync()
     {
-        return _browserContext.NewPageAsync();
+        await InternalInit();
+        return await _browserContext.NewPageAsync();
     }
 
-    public Task AddCookieAsync(Cookie cookie)
+    public async Task AddCookieAsync(Cookie cookie)
     {
-        return _browserContext.AddCookiesAsync([cookie]);
+        if (_browserContext == null)
+            return;
+
+        await _browserContext.AddCookiesAsync([cookie]);
     }
 
     public async Task UpdateTokesAsync(Token[] tokens)
     {
+        if (_browserContext == null)
+            return;
+
         var cookies = tokens.Select(x => new Cookie
         {
             Name = x.Name,
@@ -54,10 +72,11 @@ public class PwService(IConfiguration configuration, StorageService storageServi
         await _browserContext.AddCookiesAsync(cookies);
     }
 
-    public async Task<string> GetBrowserVersionAsync()
+    public async ValueTask<string> GetBrowserVersionAsync()
     {
-        var browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
-        var browserVersion = browser.Version;
+        await InternalInit();
+        var browser = await _playwright.Firefox.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        var browserVersion = $"{browser.BrowserType.Name} {browser.Version}";
         await browser.CloseAsync();
         return browserVersion;
     }
