@@ -34,8 +34,11 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
             if (item[i].IsVirtual)
             {
                 var subTasks = item.Where(x => x.ParentSeq == item[i].Seq).ToArray();
-                item[i].EstimatedLength = subTasks.Sum(x => x.EstimatedLength);
-                item[i].DownloadedLength = subTasks.Sum(x => x.DownloadedLength);
+                if (item[i].Status == TaskStatus.Downloading)
+                {
+                    item[i].EstimatedLength = subTasks.Sum(x => x.EstimatedLength);
+                    item[i].DownloadedLength = subTasks.Sum(x => x.DownloadedLength);
+                }
                 if (string.IsNullOrEmpty(item[i].ErrorMessage))
                     item[i].ErrorMessage = string.Join(" | ", subTasks.Select(x => x.ErrorMessage).Where(x => !string.IsNullOrEmpty(x)));
                 if (subTasks.Length > 0 && item[i].Status == TaskStatus.Pending)
@@ -125,7 +128,7 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
 
         if (parms.Contains("playwright"))
         {
-            infos.Add("playwrightVersion", await _pwService.GetBrowserVersionAsync());
+            infos.Add("playwrightVersion", await _pwService.GetPlaywrightVersionAsync());
         }
 
         if (parms.Contains("ytdlp"))

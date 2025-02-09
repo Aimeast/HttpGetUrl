@@ -72,11 +72,11 @@ public class PwService(IConfiguration configuration, StorageService storageServi
         await _browserContext.AddCookiesAsync(cookies);
     }
 
-    public async ValueTask<string> GetBrowserVersionAsync()
+    public async ValueTask<string> GetPlaywrightVersionAsync()
     {
         await InternalInit();
         var browser = await _playwright.Firefox.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
-        var browserVersion = $"{browser.BrowserType.Name} {browser.Version}";
+        var browserVersion = $"{typeof(Playwright).Assembly.GetName().Version} @ {browser.BrowserType.Name} {browser.Version}";
         await browser.CloseAsync();
         return browserVersion;
     }

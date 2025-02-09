@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace HttpGetUrl;
@@ -184,9 +185,33 @@ public static class Utility
             return input;
         }
 
-        string start = input.Substring(0, startLength);
+        string start = input[..startLength];
         string end = input.Substring(input.Length - endLength, endLength);
         return $"{start}........{end}";
+    }
+
+    public static string TruncateStringInUtf8(string input, int startBytes, int endBytes)
+    {
+        var count = Encoding.UTF8.GetByteCount(input);
+        if (count <= startBytes + endBytes + 3)
+            return input;
+        var start = MaxCharsInUtf8(input, startBytes);
+        var end = MaxCharsInUtf8(input.Reverse(), endBytes);
+        return $"{input[..start]}...{input.Substring(input.Length - end, end)}";
+    }
+
+    private static int MaxCharsInUtf8(IEnumerable<char> input, int bytesNum)
+    {
+        var max = 0;
+        foreach (var ch in input)
+        {
+            var count = Encoding.UTF8.GetByteCount([ch]);
+            bytesNum -= count;
+            if (bytesNum < 0)
+                return max;
+            max++;
+        }
+        return max;
     }
 
     public static async ValueTask<string> RunCmdFirstLine(string path, string args, bool wait = false)

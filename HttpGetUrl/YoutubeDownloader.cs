@@ -135,8 +135,9 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
             _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Merging);
             try
             {
-                await MergeAsync(virtualTask.TaskId, meta.VideoId, meta.Title, meta.ContainerName);
+                var distFilePath = await MergeAsync(virtualTask.TaskId, meta.VideoId, meta.Title, meta.ContainerName);
                 var partially = d1.CurrentTask.Status == TaskStatus.PartiallyCompleted || d2.CurrentTask.Status == TaskStatus.PartiallyCompleted;
+                virtualTask.DownloadedLength = new FileInfo(distFilePath).Length;
                 _taskCache.SaveTaskStatusDeferred(virtualTask, partially ? TaskStatus.PartiallyCompleted : TaskStatus.Completed);
             }
             catch (Exception ex)
@@ -151,12 +152,12 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         }
     }
 
-    private async Task MergeAsync(string taskId, string videoId, string title, string containerName)
+    private async ValueTask<string> MergeAsync(string taskId, string videoId, string title, string containerName)
     {
         var videoFilePath = _storageService.GetFilePath(taskId, $"{videoId}-video.{containerName}");
         var audioFilePath = _storageService.GetFilePath(taskId, $"{videoId}-audio.{containerName}");
         var outputFilePath = _storageService.GetFilePath(taskId, $"{videoId}-output.{containerName}");
-        var distFilePath = _storageService.GetFilePath(taskId, $"{title}.{containerName}");
+        var distFilePath = _storageService.GetFilePath(taskId, $"{Utility.TruncateStringInUtf8(title, 145, 100)}.{containerName}");
 
         var result = await FFMpegArguments
             .FromFileInput(videoFilePath)
@@ -169,6 +170,7 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         File.Delete(videoFilePath);
         File.Delete(audioFilePath);
         File.Move(outputFilePath, distFilePath);
+        return distFilePath;
     }
 
     public override async Task Download()

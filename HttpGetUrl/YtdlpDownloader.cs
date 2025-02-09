@@ -89,9 +89,15 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         var ytdlp = new YoutubeDL
         {
             YoutubeDLPath = Path.Combine(".hg", Utils.YtDlpBinaryName),
-            OutputFolder = _storageService.GetFilePath(CurrentTask.TaskId, ".")
         };
-        var options = new OptionSet { Proxy = _proxy, Cookies = Path.Combine(".hg", "tokens.txt") };
+        var options = new OptionSet
+        {
+            Proxy = _proxy,
+            Cookies = Path.Combine(".hg", "tokens.txt"),
+            Output = _storageService.GetFilePath(CurrentTask.TaskId, ".")
+                + Path.DirectorySeparatorChar
+                + Utility.TruncateStringInUtf8(CurrentTask.FileName, 145, 100) + ".%(ext)s",
+        };
         var progress = new Progress<DownloadProgress>(x =>
         {
             var match = Regex.Match(x.TotalDownloadSize ?? "", @"([\d.]+)\s*(K|M|G|T)iB", RegexOptions.IgnoreCase);
@@ -117,7 +123,13 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
             ct: CancellationTokenSource.Token,
             progress: progress,
             overrideOptions: options);
-        CurrentTask.FileName = Path.GetFileName(result.Data);
+        if (result.Success)
+        {
+            CurrentTask.FileName = Path.GetFileName(result.Data);
+            CurrentTask.DownloadedLength = new FileInfo(result.Data).Length;
+        }
+        else
+            throw new Exception(string.Join('\n', result.ErrorOutput));
     }
 
     private class VideoMeta
