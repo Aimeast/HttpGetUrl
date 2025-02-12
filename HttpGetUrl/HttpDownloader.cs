@@ -2,8 +2,8 @@
 
 namespace HttpGetUrl;
 
-public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration)
-    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, configuration)
+public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService)
 {
     private HttpResponseMessage httpResponseMessage = null;
 
@@ -11,7 +11,7 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
 
     public override async Task Analysis()
     {
-        var httpClient = CreateHttpClient();
+        var httpClient = CreateHttpClient(CurrentTask.Url.Host);
         if (CurrentTask.Referrer != null)
             httpClient.DefaultRequestHeaders.Referrer = CurrentTask.Referrer;
         if (RequestRange != null)

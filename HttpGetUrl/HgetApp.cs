@@ -10,6 +10,7 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
     private readonly TaskService _taskService = taskService;
     private readonly TaskStorageCache _taskCache = taskCache;
     private readonly PwService _pwService = pwService;
+    private readonly DateTimeOffset _statupTime = DateTimeOffset.Now;
 
     public IEnumerable<TaskFile[]> GetTaskItems()
     {
@@ -139,6 +140,11 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
         if (parms.Contains("ffmpeg"))
         {
             infos.Add("ffmpegVersion", await Utility.RunCmdFirstLine(Utils.FfmpegBinaryName, "-version"));
+        }
+
+        if (parms.Contains("startup"))
+        {
+            infos.Add("startupTime", _statupTime);
         }
 
         if (parms.Contains("tasks"))

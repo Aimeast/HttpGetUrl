@@ -74,6 +74,10 @@ Simply paste the resource URL and submit. The task will be automatically queued.
      },
      "Hget": {
        "Proxy": "socks5://127.0.0.1:1081",
+       // a multiple lines CIDR format (e.g., 1.2.4.0/24, 2001:250::/35) file,
+       // support empty line and comment line start with #
+       // put in directory `.hg`.
+       "ByPassList": ["bypass.txt"],
        "MaxConcurrentDownloads": 3
      }
    }

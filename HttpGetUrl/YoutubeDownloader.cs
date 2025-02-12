@@ -6,8 +6,8 @@ using YoutubeDLSharp.Options;
 namespace HttpGetUrl;
 
 [Downloader("Youtube", ["youtube.com", "youtu.be"])]
-public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration)
-    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, configuration)
+public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService)
 {
     private static readonly Dictionary<string, int> _codecRank = new()
     {
@@ -19,19 +19,21 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         {"vp9", 3},  // same as vp09
     };
 
-    private async Task<RunResult<VideoData>> FetchVideoAsync(string url)
+    private async Task<RunResult<VideoData>> FetchVideoAsync(Uri url)
     {
         var ytdl = new YoutubeDL { YoutubeDLPath = Path.Combine(".hg", Utils.YtDlpBinaryName) };
-        var options = new OptionSet { Proxy = _proxy, Cookies = Path.Combine(".hg", "tokens.txt") };
+        var options = new OptionSet { Cookies = Path.Combine(".hg", "tokens.txt") };
+        if (_proxyService.TestUseProxy(url.Host))
+            options.Proxy = _proxyService.Proxy;
 
-        var result = await ytdl.RunVideoDataFetch(url, ct: CancellationTokenSource.Token, overrideOptions: options);
+        var result = await ytdl.RunVideoDataFetch(url.ToString(), ct: CancellationTokenSource.Token, overrideOptions: options);
 
         return result;
     }
 
     public override async Task Analysis()
     {
-        var result = await FetchVideoAsync(CurrentTask.Url.ToString());
+        var result = await FetchVideoAsync(CurrentTask.Url);
         var isPlaylist = result.Data?.Entries != null;
         if (isPlaylist)
             AnalysisPlayList(result.Data.Entries);
@@ -60,7 +62,7 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
             var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq, async () =>
             {
                 _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Downloading);
-                var result = await FetchVideoAsync(videoData.Url.ToString());
+                var result = await FetchVideoAsync(new Uri(videoData.Url));
                 if (result.Success)
                 {
                     var meta = AnalysisVideo(result.Data);

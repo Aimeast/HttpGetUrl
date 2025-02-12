@@ -5,8 +5,8 @@ using System.Text.RegularExpressions;
 namespace HttpGetUrl;
 
 [Downloader("Twitter", ["x.com", "t.co"])]
-public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration, PwService pwService)
-    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, configuration)
+public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, PwService pwService)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService)
 {
     private readonly PwService _pwService = pwService;
 

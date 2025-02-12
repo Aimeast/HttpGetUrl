@@ -1,27 +1,31 @@
-﻿using System.Text.RegularExpressions;
+﻿using System;
+using System.Text.RegularExpressions;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Metadata;
 using YoutubeDLSharp.Options;
 
 namespace HttpGetUrl;
 
-public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration)
-    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, configuration)
+public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService)
 {
     private bool _isPlaylist;
 
-    private async Task<RunResult<VideoData>> FetchVideoDataAsync(string url)
+    private async Task<RunResult<VideoData>> FetchVideoDataAsync(Uri url)
     {
         var ytdlp = new YoutubeDL { YoutubeDLPath = Path.Combine(".hg", Utils.YtDlpBinaryName) };
-        var options = new OptionSet { Proxy = _proxy, Cookies = Path.Combine(".hg", "tokens.txt") };
-        var result = await ytdlp.RunVideoDataFetch(url, ct: CancellationTokenSource.Token, overrideOptions: options);
+        var options = new OptionSet { Cookies = Path.Combine(".hg", "tokens.txt") };
+        if (_proxyService.TestUseProxy(url.Host))
+            options.Proxy = _proxyService.Proxy;
+
+        var result = await ytdlp.RunVideoDataFetch(url.ToString(), ct: CancellationTokenSource.Token, overrideOptions: options);
 
         return result;
     }
 
     public override async Task Analysis()
     {
-        var result = await FetchVideoDataAsync(CurrentTask.Url.ToString());
+        var result = await FetchVideoDataAsync(CurrentTask.Url);
         if (result.Data == null || result.Data.FormatID == "0" // Unsupported url
             || result.Data.Direct) // Direct url
             throw new NotSupportedException($"Ytdlp not support the Url '{CurrentTask.Url}'.");
@@ -51,7 +55,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
             var info = new TaskService.TaskInfo(subTask.TaskId, subTask.Seq, async () =>
             {
                 _taskCache.SaveTaskStatusDeferred(subTask, TaskStatus.Downloading);
-                var result = await FetchVideoDataAsync(videoData.Url.ToString());
+                var result = await FetchVideoDataAsync(new Uri(videoData.Url));
                 if (result.Success)
                 {
                     await ExecDownloadAsync(subTask);
@@ -92,12 +96,13 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         };
         var options = new OptionSet
         {
-            Proxy = _proxy,
             Cookies = Path.Combine(".hg", "tokens.txt"),
             Output = _storageService.GetFilePath(CurrentTask.TaskId, ".")
                 + Path.DirectorySeparatorChar
                 + Utility.TruncateStringInUtf8(CurrentTask.FileName, 145, 100) + ".%(ext)s",
         };
+        if (_proxyService.TestUseProxy(CurrentTask.Url.Host))
+            options.Proxy = _proxyService.Proxy;
         var progress = new Progress<DownloadProgress>(x =>
         {
             var match = Regex.Match(x.TotalDownloadSize ?? "", @"([\d.]+)\s*(K|M|G|T)iB", RegexOptions.IgnoreCase);

@@ -11,6 +11,7 @@ public class Program
         builder.Services
             .AddSingleton<HgetApp>()
             .AddSingleton<DownloaderFactory>()
+            .AddSingleton<ProxyService>()
             .AddSingleton<StorageService>()
             .AddSingleton<TaskStorageCache>()
             .AddSingleton<TaskService>()

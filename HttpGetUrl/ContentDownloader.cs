@@ -3,13 +3,13 @@ using System.Net.Http.Headers;
 
 namespace HttpGetUrl;
 
-public abstract class ContentDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, IConfiguration configuration)
+public abstract class ContentDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
 {
-    protected readonly string _proxy = configuration.GetValue<string>("Hget:Proxy");
     protected readonly DownloaderFactory _downloaderFactory = downloaderFactory;
     protected readonly StorageService _storageService = storageService;
     protected readonly TaskService _taskService = taskService;
     protected readonly TaskStorageCache _taskCache = taskCache;
+    protected readonly ProxyService _proxyService = proxyService;
 
     protected HttpClientHandler _httpClientHandler;
 
@@ -19,13 +19,13 @@ public abstract class ContentDownloader(TaskFile task, CancellationTokenSource c
     public abstract Task Analysis();
     public abstract Task Download();
 
-    protected virtual HttpClient CreateHttpClient()
+    protected virtual HttpClient CreateHttpClient(string domain)
     {
         if (_httpClientHandler == null)
         {
             _httpClientHandler = new HttpClientHandler();
-            if (_proxy != null)
-                _httpClientHandler.Proxy = new WebProxy(_proxy);
+            if (_proxyService.TestUseProxy(domain))
+                _httpClientHandler.Proxy = new WebProxy(_proxyService.Proxy);
             _httpClientHandler.UseCookies = true;
             foreach (var token in _storageService.GetTokens())
             {
