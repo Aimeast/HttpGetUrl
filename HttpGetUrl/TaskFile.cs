@@ -2,6 +2,7 @@
 
 public class TaskFile
 {
+    public string DownloaderType { get; set; }
     public string TaskId { get; set; }
     public Uri Url { get; set; }
     public Uri Referrer { get; set; }

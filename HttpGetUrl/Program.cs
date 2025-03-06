@@ -50,6 +50,8 @@ public class Program
             ([FromServices] HgetApp hget, TaskFile task) => hget.CreateTask(task));
         app.MapDelete("/task",
             ([FromServices] HgetApp hget, string taskId) => hget.DeleteTask(taskId));
+        app.MapPatch("/task",
+            ([FromServices] HgetApp hget, string taskId) => hget.ResumeTask(taskId));
         app.MapGet("/tokens",
             ([FromServices] HgetApp hget) => hget.GetTokens());
         app.MapPost("/tokens", async

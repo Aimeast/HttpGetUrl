@@ -6,8 +6,9 @@ using YoutubeDLSharp.Options;
 
 namespace HttpGetUrl;
 
-public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
-    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService)
+[Downloader("Ytdlp", ["*"])]
+public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, IConfiguration configuration)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, configuration)
 {
     private bool _isPlaylist;
 
@@ -135,6 +136,18 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         }
         else
             throw new Exception(string.Join('\n', result.ErrorOutput));
+    }
+
+    public override async Task Resume()
+    {
+        if (CurrentTask.Status == TaskStatus.Completed)
+            return;
+
+        CurrentTask.FileName = null;
+        _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Pending);
+
+        _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.TaskId, CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+        await Task.CompletedTask;
     }
 
     private class VideoMeta

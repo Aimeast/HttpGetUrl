@@ -3,21 +3,37 @@ using System.Net.Http.Headers;
 
 namespace HttpGetUrl;
 
-public abstract class ContentDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
+public abstract class ContentDownloader
 {
-    protected readonly DownloaderFactory _downloaderFactory = downloaderFactory;
-    protected readonly StorageService _storageService = storageService;
-    protected readonly TaskService _taskService = taskService;
-    protected readonly TaskStorageCache _taskCache = taskCache;
-    protected readonly ProxyService _proxyService = proxyService;
+    protected readonly DownloaderFactory _downloaderFactory;
+    protected readonly StorageService _storageService;
+    protected readonly TaskService _taskService;
+    protected readonly TaskStorageCache _taskCache;
+    protected readonly ProxyService _proxyService;
+    protected readonly int _maxRetry;
 
     protected HttpClientHandler _httpClientHandler;
 
-    public TaskFile CurrentTask { get; set; } = task;
-    public CancellationTokenSource CancellationTokenSource { get; } = cancellationTokenSource;
+    public ContentDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, IConfiguration configuration)
+    {
+        _downloaderFactory = downloaderFactory;
+        _storageService = storageService;
+        _taskService = taskService;
+        _taskCache = taskCache;
+        _proxyService = proxyService;
+        _maxRetry = configuration.GetValue<int>("Hget:MaxRetry", 5);
+        CurrentTask = task;
+        CancellationTokenSource = cancellationTokenSource;
+
+        task.DownloaderType = GetType().FullName;
+    }
+
+    public TaskFile CurrentTask { get; set; }
+    public CancellationTokenSource CancellationTokenSource { get; }
 
     public abstract Task Analysis();
     public abstract Task Download();
+    public abstract Task Resume();
 
     protected virtual HttpClient CreateHttpClient(string domain)
     {
@@ -39,6 +55,7 @@ public abstract class ContentDownloader(TaskFile task, CancellationTokenSource c
 
     public async Task ExecuteDownloadProcessAsync()
     {
+        CurrentTask.ErrorMessage = null;
         _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Downloading);
         var retry = true;
         var times = 0;
@@ -47,8 +64,11 @@ public abstract class ContentDownloader(TaskFile task, CancellationTokenSource c
             retry = false;
             try
             {
-                await Analysis();
-                await Download();
+                if (CurrentTask.EstimatedLength == -1 || CurrentTask.DownloadedLength < CurrentTask.EstimatedLength)
+                {
+                    await Analysis();
+                    await Download();
+                }
                 _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Completed);
             }
             catch (NotSupportedException ex) when (this is YtdlpDownloader)
@@ -57,10 +77,12 @@ public abstract class ContentDownloader(TaskFile task, CancellationTokenSource c
                 _ = downloader.ExecuteDownloadProcessAsync();
             }
             catch (Exception ex) when
-            ((ex is IOException || ex is TimeoutException) && this is HttpDownloader httpDownloader && times++ < 3)
+            ((ex is IOException || ex is TimeoutException || ex is HttpRequestException)
+            && this is HttpDownloader httpDownloader && ++times < _maxRetry)
             {
                 retry = true;
                 httpDownloader.RequestRange = new RangeItemHeaderValue(CurrentTask.DownloadedLength, null);
+                await Task.Delay(times * 15_000);
             }
             catch (Exception ex)
             {
@@ -70,11 +92,15 @@ public abstract class ContentDownloader(TaskFile task, CancellationTokenSource c
         }
     }
 
-    public HttpDownloader ForkToHttpDownloader(Uri url, Uri referrer = null)
+    public HttpDownloader ForkToHttpDownloader(Uri url, Uri referrer = null, string filename = null)
     {
-        var newTask = _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
+        TaskFile newTask = null;
+        if (filename != null)
+            newTask = _taskCache.GetTaskItems(CurrentTask.TaskId).FirstOrDefault(x => x.FileName == filename);
+        newTask ??= _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
         newTask.Url = url;
         newTask.Referrer = referrer;
+        newTask.FileName = filename;
         var http = _downloaderFactory.CreateHttpDownloader(newTask, CancellationTokenSource);
         http._httpClientHandler = _httpClientHandler;
         return http;

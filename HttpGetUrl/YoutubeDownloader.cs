@@ -1,4 +1,5 @@
 ﻿using FFMpegCore;
+using System.Net.Http.Headers;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Metadata;
 using YoutubeDLSharp.Options;
@@ -6,8 +7,8 @@ using YoutubeDLSharp.Options;
 namespace HttpGetUrl;
 
 [Downloader("Youtube", ["youtube.com", "youtu.be"])]
-public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
-    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService)
+public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, IConfiguration configuration)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, configuration)
 {
     private static readonly Dictionary<string, int> _codecRank = new()
     {
@@ -39,7 +40,12 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
             AnalysisPlayList(result.Data.Entries);
         else if (result.Success)
         {
-            var virtualTask = AddVirtualTask(result.Data.Title);
+            CurrentTask.Url = new Uri(result.Data.WebpageUrl);
+            var virtualTask = _taskCache.GetExistTaskItem(CurrentTask.TaskId, CurrentTask.Url);
+            if (virtualTask != null)
+                return;
+
+            virtualTask = AddVirtualTask(result.Data.Title, CurrentTask.Url);
             var meta = AnalysisVideo(result.Data);
             var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq,
                 async () => await ExecDownloadAsync(meta, virtualTask), CancellationTokenSource);
@@ -57,32 +63,41 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         {
             if (videoData.Duration == null)
                 continue;
-
-            var virtualTask = AddVirtualTask(videoData.Title);
-            var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq, async () =>
-            {
-                _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Downloading);
-                var result = await FetchVideoAsync(new Uri(videoData.Url));
-                if (result.Success)
-                {
-                    var meta = AnalysisVideo(result.Data);
-                    await ExecDownloadAsync(meta, virtualTask);
-                }
-                else
-                {
-                    virtualTask.ErrorMessage = string.Join('\n', result.ErrorOutput);
-                    _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Error);
-                }
-            }, CancellationTokenSource);
-            _taskService.QueueTask(info);
+            var url = new Uri(videoData.Url);
+            var virtualTask = _taskCache.GetExistTaskItem(CurrentTask.TaskId, url);
+            if (virtualTask != null)
+                continue;
+            virtualTask = AddVirtualTask(videoData.Title, url);
+            QueueVirtualTask(virtualTask);
         }
     }
 
-    private TaskFile AddVirtualTask(string title)
+    private void QueueVirtualTask(TaskFile virtualTask)
+    {
+        var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq, async () =>
+        {
+            _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Downloading);
+            var result = await FetchVideoAsync(virtualTask.Url);
+            if (result.Success)
+            {
+                var meta = AnalysisVideo(result.Data);
+                await ExecDownloadAsync(meta, virtualTask);
+            }
+            else
+            {
+                virtualTask.ErrorMessage = string.Join('\n', result.ErrorOutput);
+                _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Error);
+            }
+        }, CancellationTokenSource);
+        _taskService.QueueTask(info);
+    }
+
+    private TaskFile AddVirtualTask(string title, Uri url)
     {
         // virtual task for show file line on web UI
         var virtualTask = _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
         virtualTask.FileName = $"{title}";
+        virtualTask.Url = url;
         virtualTask.IsVirtual = true;
         _taskCache.SaveTaskStatusDeferred(virtualTask);
         return virtualTask;
@@ -120,14 +135,21 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         virtualTask.FileName = $"{meta.Title}.{meta.ContainerName}";
         _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Downloading);
 
-        var d1 = ForkToHttpDownloader(new Uri(meta.VideoUrl));
+        var f1 = $"{meta.VideoId}-video.{meta.ContainerName}";
+        var d1 = ForkToHttpDownloader(new Uri(meta.VideoUrl), filename: f1);
         d1.CurrentTask.ParentSeq = virtualTask.Seq;
         d1.CurrentTask.IsHide = true;
-        d1.CurrentTask.FileName = $"{meta.VideoId}-video.{meta.ContainerName}";
-        var d2 = ForkToHttpDownloader(new Uri(meta.AudioUrl));
+        d1.CurrentTask.FileName = f1;
+        d1.CurrentTask.DownloadedLength = _storageService.GetFileLength(CurrentTask.TaskId, f1) ?? 0;
+        d1.RequestRange = new RangeItemHeaderValue(d1.CurrentTask.DownloadedLength, null);
+
+        var f2 = $"{meta.VideoId}-audio.{meta.ContainerName}";
+        var d2 = ForkToHttpDownloader(new Uri(meta.AudioUrl), filename: f2);
         d2.CurrentTask.ParentSeq = virtualTask.Seq;
         d2.CurrentTask.IsHide = true;
-        d2.CurrentTask.FileName = $"{meta.VideoId}-audio.{meta.ContainerName}";
+        d2.CurrentTask.FileName = f2;
+        d2.CurrentTask.DownloadedLength = _storageService.GetFileLength(CurrentTask.TaskId, f2) ?? 0;
+        d2.RequestRange = new RangeItemHeaderValue(d2.CurrentTask.DownloadedLength, null);
 
         var task1 = d1.ExecuteDownloadProcessAsync();
         var task2 = d2.ExecuteDownloadProcessAsync();
@@ -169,6 +191,9 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
                 .WithAudioCodec("copy"))
             .ProcessAsynchronously();
 
+        if (!result)
+            throw new FormatException($"Convert {videoId} to {containerName} error.");
+
         File.Delete(videoFilePath);
         File.Delete(audioFilePath);
         File.Move(outputFilePath, distFilePath);
@@ -177,6 +202,25 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
 
     public override async Task Download()
     {
+        await Task.CompletedTask;
+    }
+
+    public override async Task Resume()
+    {
+        var tasks = _taskCache.GetTaskItems(CurrentTask.TaskId);
+
+        if (tasks[0].FileName == null)
+            _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.TaskId, CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+
+        foreach (var task in tasks)
+            if (task.Status != TaskStatus.Completed)
+            {
+                task.ErrorMessage = null;
+                _taskCache.SaveTaskStatusDeferred(task, TaskStatus.Pending);
+                if (task.Seq != 0 && task.ParentSeq == 0)
+                    QueueVirtualTask(task);
+            }
+
         await Task.CompletedTask;
     }
 

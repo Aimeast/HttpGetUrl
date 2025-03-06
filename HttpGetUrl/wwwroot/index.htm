@@ -14,6 +14,7 @@
 
         .btn-sm {
             font-size: 0.85rem;
+            margin: 4px 4px 2px 4px;
         }
 
         .input-group-text {
@@ -120,7 +121,7 @@
                     size /= 1024;
                     unitIndex++;
                 }
-                return `${size.toFixed(Math.min(unitIndex, 1))}${units[unitIndex]}`;
+                return `${size.toFixed(Math.min(unitIndex, 2))}${units[unitIndex]}`;
             }
 
             function truncateUrl(url, maxLength = 100) {
@@ -219,15 +220,16 @@
                         $('#table-body').append(
                             `<tr>
                                 <td data-label="TaskId">${item[0].taskId}</td>
-                                <td><div><a target="_blank" class="break" href="${item[0].url}">${truncateUrl(item[0].url)}</a> ${item[0].errorMessage ?? ''} ${subtable}</div></td>
-                                <td data-label="Action"><button class="btn btn-danger btn-sm delete-btn" data-taskid="${item[0].taskId}" data-files="${htmlEscape(item.filter(x => !x.isHide).map(x => x.fileName).join(','))}">Delete</button></td>
+                                <td><div><a rel="noreferrer" target="_blank" class="break" href="${item[0].url}">${truncateUrl(item[0].url)}</a> ${item[0].errorMessage ?? ''} ${subtable}</div></td>
+                                <td data-label="Action"><button class="btn btn-sm btn-secondary resume-btn" data-taskid="${item[0].taskId}">Resume</button><button class="btn btn-danger btn-sm delete-btn" data-taskid="${item[0].taskId}" data-files="${htmlEscape(item.filter(x => !x.isHide).map(x => x.fileName).join(','))}">Delete</button></td>
                             </tr>`
                         );
                     });
                     $('.copylink-btn').off('click').on('click', handleCopyLinks);
+                    $('.resume-btn').off('click').on('click', handleResume);
                     $('.delete-btn').off('click').on('click', handleDelete);
                 }).fail(function (jqXHR, textStatus, errorThrown) {
-                    showError(`Failed to refresh data: ${textStatus} - ${errorThrown}`);
+                    showError(`Failed to refresh data: ${jqXHR.status} - ${jqXHR.responseJSON}`);
                 });
                 $.get(apiInfo, function (data) {
                     $('#infos').text(`FreeSpace: ${formatSize(data.diskUsage.freeSpace)} / DiskSize: ${formatSize(data.diskUsage.diskSize)}; Protocol: ${data.protocol}`);
@@ -248,7 +250,7 @@
                         refreshTable();
                     },
                     error: function (jqXHR, textStatus, errorThrown) {
-                        showError(`Failed to submit data: ${textStatus} - ${errorThrown}`);
+                        showError(`Failed to submit data: ${jqXHR.status} - ${jqXHR.responseJSON}`);
                     }
                 });
             }
@@ -264,6 +266,21 @@
                 navigator.clipboard.writeText(links);
             }
 
+            function handleResume() {
+                const taskId = $(this).data('taskid');
+                $.ajax({
+                    url: `${apiUrl}?taskId=${taskId}`,
+                    type: 'PATCH',
+                    success: function (response) {
+                        console.log(`PATCH for resume: ${url}`, response);
+                        refreshTable();
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        showError(`Failed to resume task ${taskId}: ${jqXHR.status} - ${jqXHR.responseJSON}`);
+                    }
+                });
+            }
+
             function handleDelete() {
                 const taskId = $(this).data('taskid');
                 const files = $(this).data('files');
@@ -276,7 +293,7 @@
                             refreshTable();
                         },
                         error: function (jqXHR, textStatus, errorThrown) {
-                            showError(`Failed to delete data: ${textStatus} - ${errorThrown}`);
+                            showError(`Failed to delete task ${taskId}: ${jqXHR.status} - ${jqXHR.responseJSON}`);
                         }
                     });
                 }

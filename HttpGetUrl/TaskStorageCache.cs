@@ -8,12 +8,18 @@ public class TaskStorageCache(StorageService storageService)
     private readonly ConcurrentDictionary<string, TaskFile[]> _statusToBeSavedDeferred = new();
     private Task _running = null;
 
+    public TaskFile GetExistTaskItem(string taskId, Uri url)
+    {
+        var tasks = GetTaskItems(taskId);
+        return tasks.Skip(1).FirstOrDefault(x => x.Url == url);
+    }
+
     public TaskFile GetNextTaskItemSequence(string taskId)
     {
         using (StringLock.LockString($"seq-{taskId}"))
         {
             var tasks = GetTaskItems(taskId);
-            var taskItem = new TaskFile { TaskId = taskId, Seq = tasks.Length };
+            var taskItem = new TaskFile { TaskId = taskId, Seq = tasks.Length, EstimatedLength = -1 };
             SaveTaskStatusDeferred(taskItem);
             return taskItem;
         }
@@ -44,6 +50,15 @@ public class TaskStorageCache(StorageService storageService)
                 _statusToBeSavedDeferred.TryAdd(task.TaskId, tasks);
         }
         PluseSaveTask();
+    }
+
+    public void FlushTasks(TaskFile[] tasks)
+    {
+        using (StringLock.LockString($"task-{tasks[0].TaskId}"))
+        {
+            _statusToBeSavedDeferred.TryRemove(tasks[0].TaskId, out var _);
+            _storageService.SaveTasks(tasks);
+        }
     }
 
     public void DeleteTask(string taskId)

@@ -69,6 +69,11 @@ public class TaskService(IConfiguration configuration, ILogger<TaskService> logg
             info.Cts.Cancel();
     }
 
+    public bool ExistTask(string taskId)
+    {
+        return _running.Values.Any(x => x.TaskId == taskId) || _queue.Any(x => x.TaskId == taskId);
+    }
+
     public string[] ListTasks()
     {
         var list = new List<string>();

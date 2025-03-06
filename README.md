@@ -78,7 +78,8 @@ Simply paste the resource URL and submit. The task will be automatically queued.
        // support empty line and comment line start with #
        // put in directory `.hg`.
        "ByPassList": ["bypass.txt"],
-       "MaxConcurrentDownloads": 3
+       "MaxConcurrentDownloads": 3,
+       "MaxRetry": 5
      }
    }
    ```

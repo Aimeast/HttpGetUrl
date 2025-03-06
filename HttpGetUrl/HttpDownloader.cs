@@ -2,8 +2,9 @@
 
 namespace HttpGetUrl;
 
-public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService)
-    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService)
+[Downloader("Http", ["*"])]
+public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, IConfiguration configuration)
+    : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, configuration)
 {
     private HttpResponseMessage httpResponseMessage = null;
 
@@ -14,13 +15,20 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
         var httpClient = CreateHttpClient(CurrentTask.Url.Host);
         if (CurrentTask.Referrer != null)
             httpClient.DefaultRequestHeaders.Referrer = CurrentTask.Referrer;
-        if (RequestRange != null)
+        if (RequestRange != null && RequestRange.From != 0)
         {
             httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue();
             httpClient.DefaultRequestHeaders.Range.Ranges.Add(RequestRange);
         }
 
-        httpResponseMessage = await httpClient.GetAsync(CurrentTask.Url, HttpCompletionOption.ResponseHeadersRead, CancellationTokenSource.Token);
+        try
+        {
+            httpResponseMessage = await httpClient.GetAsync(CurrentTask.Url, HttpCompletionOption.ResponseHeadersRead, CancellationTokenSource.Token);
+        }
+        catch (TaskCanceledException ex)
+        {
+            throw new TimeoutException($"Timeout on connecting to HTTP server.");
+        }
         httpResponseMessage.EnsureSuccessStatusCode();
 
         var contentLength = httpResponseMessage.Content.Headers.ContentLength ?? -1;
@@ -45,7 +53,8 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
             }
         }
         CurrentTask.FileName ??= filename;
-        CurrentTask.EstimatedLength = contentLength;
+        if (RequestRange == null || RequestRange.From == 0)
+            CurrentTask.EstimatedLength = contentLength;
         _taskCache.SaveTaskStatusDeferred(CurrentTask);
     }
 
@@ -62,7 +71,7 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
             var bytesRead = 0;
             var buffer = new byte[16 * 1024];
             using var responseStream = await httpResponseMessage.Content.ReadAsStreamAsync(linkedCancelSource.Token);
-            using var fileStream = _storageService.OpenFileStream(CurrentTask.TaskId, CurrentTask.FileName);
+            using var fileStream = _storageService.OpenFileStream(CurrentTask.TaskId, CurrentTask.FileName, RequestRange?.From);
             while ((bytesRead = await responseStream.ReadAsync(buffer, linkedCancelSource.Token)) > 0)
             {
                 await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead));
@@ -71,10 +80,23 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
                 timeoutCancelSource.CancelAfter(timeout);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (isTimeout)
         {
-            if (isTimeout) throw new TimeoutException($"Timeout in {timeout}ms.");
-            else throw;
+            throw new TimeoutException($"Timeout in {timeout}ms while read stream.");
         }
+    }
+
+    public override async Task Resume()
+    {
+        if (CurrentTask.Status == TaskStatus.Completed)
+            return;
+
+        CurrentTask.IsHide = false;
+        CurrentTask.IsVirtual = false;
+        CurrentTask.FileName = null;
+        _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Pending);
+
+        _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.TaskId, CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+        await Task.CompletedTask;
     }
 }

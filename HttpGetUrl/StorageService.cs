@@ -65,12 +65,23 @@ public class StorageService(IHostEnvironment hostEnvironment)
         Directory.CreateDirectory(folderPath);
     }
 
-    public FileStream OpenFileStream(string taskId, string filename)
+    public FileStream OpenFileStream(string taskId, string filename, long? position)
     {
         var filePath = GetFilePath(taskId, filename);
         var stream = File.OpenWrite(filePath);
-        stream.Position = stream.Length;
+        stream.Position = position ?? 0;
+        stream.SetLength(stream.Position);
         return stream;
+    }
+
+    public long? GetFileLength(string taskId, string filename)
+    {
+        var filePath = GetFilePath(taskId, filename);
+        var info = new FileInfo(filePath);
+        if (info.Exists)
+            return info.Length;
+        else
+            return null;
     }
 
     public string GetFilePath(string taskId, string filename)

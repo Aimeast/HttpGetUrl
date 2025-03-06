@@ -51,7 +51,7 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
 
     public IResult CreateTask(TaskFile task)
     {
-        if (task.Url.Scheme != Uri.UriSchemeHttp && task.Url.Scheme != Uri.UriSchemeHttps)
+        if (!task.Url.IsAbsoluteUri || task.Url.Scheme != Uri.UriSchemeHttp && task.Url.Scheme != Uri.UriSchemeHttps)
         {
             return Results.BadRequest($"Only supported {string.Join('/', [Uri.UriSchemeHttp, Uri.UriSchemeHttps])}.");
         }
@@ -81,6 +81,18 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
         {
             return Results.BadRequest(ex.Message);
         }
+    }
+
+    public IResult ResumeTask(string taskId)
+    {
+        var tasks = _taskCache.GetTaskItems(taskId);
+        if (_taskService.ExistTask(taskId))
+            return Results.Conflict($"Task {taskId} is running, not able to resume it.");
+
+        var downloader = _downloaderFactory.CreateDownloader(tasks[0]);
+        downloader.Resume();
+
+        return Results.Ok();
     }
 
     public Token[] GetTokens()

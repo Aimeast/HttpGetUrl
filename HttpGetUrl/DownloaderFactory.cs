@@ -24,7 +24,9 @@ public class DownloaderFactory
     public ContentDownloader CreateDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource = null)
     {
         cancellationTokenSource ??= new CancellationTokenSource();
-        var info = _downloaders.FirstOrDefault(x => x.SupportedDomains.Any(y => Utility.IsSubdomain(y, task.Url.Host)));
+        var info = _downloaders.FirstOrDefault(x => task.DownloaderType == null
+                        ? x.SupportedDomains.Any(y => Utility.IsSubdomain(y, task.Url.Host))
+                        : x.ServiceType.FullName == task.DownloaderType);
         if (info != null)
         {
             try
