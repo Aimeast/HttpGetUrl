@@ -87,15 +87,33 @@
 
     <script>
         (function () {
+            const httpStatusTexts = {
+                200: 'OK',
+                204: 'No Content',
+                400: 'Bad Request',
+                401: 'Unauthorized',
+                403: 'Forbidden',
+                404: 'Not Found',
+                405: 'Method Not Allowed',
+                406: 'Not Acceptable',
+                409: 'Conflict',
+                500: 'Internal Server Error',
+                503: 'Service Unavailable',
+            };
+
             // UI
-            function showError(message) { $('#error-message').text(message).show(); }
+            function showError(title, statusCode, text) {
+                $('#error-message').multiline(
+                    `${statusCode} ${httpStatusTexts[statusCode] || 'Unknown Error'}\n${title}. ${text ?? ''}`).show();
+            }
             function hideError() { $('#error-message').hide(); }
             function handleReferrerFocus() { $('#referrer').css('color', 'black'); }
             function handleClearUrl() { $('#url').val(''); $('#referrer').val(''); $('#url').trigger("focus"); }
             function handleClearReferrer() { $('#referrer').val(''); }
             function handleUrlInput() {
-                const url = $('#url').val();
+                const url = /https?:\/\/[-a-zA-Z0-9@:%._\+~#=]+[-a-zA-Z0-9@:%_\+.~#?&/=]*/.exec($('#url').val());
                 const referrer = getUrlParent(url);
+                url && $('#url').val(url);
                 $('#referrer').val(referrer).css('color', 'grey');
             }
 
@@ -229,7 +247,7 @@
                     $('.resume-btn').off('click').on('click', handleResume);
                     $('.delete-btn').off('click').on('click', handleDelete);
                 }).fail(function (jqXHR, textStatus, errorThrown) {
-                    showError(`Failed to refresh data: ${jqXHR.status} - ${jqXHR.responseJSON}`);
+                    showError('Failed to refresh data', jqXHR.status, jqXHR.responseJSON);
                 });
                 $.get(apiInfo, function (data) {
                     $('#infos').text(`FreeSpace: ${formatSize(data.diskUsage.freeSpace)} / DiskSize: ${formatSize(data.diskUsage.diskSize)}; Protocol: ${data.protocol}`);
@@ -250,7 +268,7 @@
                         refreshTable();
                     },
                     error: function (jqXHR, textStatus, errorThrown) {
-                        showError(`Failed to submit data: ${jqXHR.status} - ${jqXHR.responseJSON}`);
+                        showError('Failed to submit data', jqXHR.status, jqXHR.responseJSON);
                     }
                 });
             }
@@ -276,7 +294,7 @@
                         refreshTable();
                     },
                     error: function (jqXHR, textStatus, errorThrown) {
-                        showError(`Failed to resume task ${taskId}: ${jqXHR.status} - ${jqXHR.responseJSON}`);
+                        showError(`Failed to resume task ${taskId}`, jqXHR.status, jqXHR.responseJSON);
                     }
                 });
             }
@@ -293,10 +311,16 @@
                             refreshTable();
                         },
                         error: function (jqXHR, textStatus, errorThrown) {
-                            showError(`Failed to delete task ${taskId}: ${jqXHR.status} - ${jqXHR.responseJSON}`);
+                            showError(`Failed to delete task ${taskId}`, jqXHR.status, jqXHR.responseJSON);
                         }
                     });
                 }
+            }
+
+            $.fn.multiline = function (text) {
+                this.text(text);
+                this.html(this.html().replace(/\n/g, '<br/>'));
+                return this;
             }
 
             // Event Bindings

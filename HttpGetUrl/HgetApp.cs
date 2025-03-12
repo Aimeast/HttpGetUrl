@@ -53,7 +53,7 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
     {
         if (!task.Url.IsAbsoluteUri || task.Url.Scheme != Uri.UriSchemeHttp && task.Url.Scheme != Uri.UriSchemeHttps)
         {
-            return Results.BadRequest($"Only supported {string.Join('/', [Uri.UriSchemeHttp, Uri.UriSchemeHttps])}.");
+            return Results.BadRequest($"Only {string.Join('/', [Uri.UriSchemeHttp, Uri.UriSchemeHttps])} is supported.");
         }
 
         task.TaskId = DateTime.Now.ToString("yyMMdd-HHmmss");
