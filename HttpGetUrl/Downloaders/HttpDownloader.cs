@@ -1,6 +1,6 @@
 ﻿using System.Net.Http.Headers;
 
-namespace HttpGetUrl;
+namespace HttpGetUrl.Downloaders;
 
 [Downloader("Http", ["*"])]
 public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, IConfiguration configuration)

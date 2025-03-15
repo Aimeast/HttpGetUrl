@@ -4,7 +4,7 @@ using YoutubeDLSharp;
 using YoutubeDLSharp.Metadata;
 using YoutubeDLSharp.Options;
 
-namespace HttpGetUrl;
+namespace HttpGetUrl.Downloaders;
 
 [Downloader("Ytdlp", ["*"])]
 public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, IConfiguration configuration)

@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Net.Http.Headers;
 
-namespace HttpGetUrl;
+namespace HttpGetUrl.Downloaders;
 
 public abstract class ContentDownloader
 {
@@ -92,12 +92,10 @@ public abstract class ContentDownloader
         }
     }
 
-    public HttpDownloader ForkToHttpDownloader(Uri url, Uri referrer = null, string filename = null)
+    public HttpDownloader ForkToHttpDownloader(Uri url, Uri referrer = null, string filename = null, int? seq = null)
     {
-        TaskFile newTask = null;
-        if (filename != null)
-            newTask = _taskCache.GetTaskItems(CurrentTask.TaskId).FirstOrDefault(x => x.FileName == filename);
-        newTask ??= _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
+        TaskFile newTask = _taskCache.GetTaskItems(CurrentTask.TaskId).FirstOrDefault(x => x.FileName == filename || x.Seq == seq)
+            ?? _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
         newTask.Url = url;
         newTask.Referrer = referrer;
         newTask.FileName = filename;
