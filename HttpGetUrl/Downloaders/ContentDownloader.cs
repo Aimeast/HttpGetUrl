@@ -1,5 +1,7 @@
-﻿using System.Net;
+﻿using Microsoft.Playwright;
+using System.Net;
 using System.Net.Http.Headers;
+using Cookie = System.Net.Cookie;
 
 namespace HttpGetUrl.Downloaders;
 
@@ -62,6 +64,11 @@ public abstract class ContentDownloader
         while (retry)
         {
             retry = false;
+            if (times > 0)
+            {
+                CurrentTask.ErrorMessage = $"Retring in {times} times.";
+                _taskCache.SaveTaskStatusDeferred(CurrentTask);
+            }
             try
             {
                 if (CurrentTask.EstimatedLength == -1 || CurrentTask.DownloadedLength < CurrentTask.EstimatedLength)
@@ -75,6 +82,19 @@ public abstract class ContentDownloader
             {
                 var downloader = _downloaderFactory.CreateHttpDownloader(CurrentTask);
                 _ = downloader.ExecuteDownloadProcessAsync();
+            }
+            catch (PlaywrightException ex) when (++times < _maxRetry)
+            {
+                retry = true;
+                await Task.Delay(times * 15_000);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden && this is HttpDownloader httpDownloader)
+            {
+                if (httpDownloader.CurrentTask.Referrer == null)
+                {
+                    retry = true;
+                    httpDownloader.CurrentTask.Referrer = httpDownloader.CurrentTask.Url;
+                }
             }
             catch (Exception ex) when
             ((ex is IOException || ex is TimeoutException || ex is HttpRequestException)

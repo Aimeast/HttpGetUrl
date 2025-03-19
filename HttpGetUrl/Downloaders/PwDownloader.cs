@@ -22,17 +22,31 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
                 return;
             }
 
+            if (tcs.Task.IsCompleted || page.IsClosed)
+                return;
+
             var match = Regex.Match(response.Url, UrlRegex);
             if (match.Success)
             {
-                var responseBody = await response.TextAsync();
-                tcs.SetResult();
-
-                var urls = GetUrls(match, responseBody);
-                foreach (var (url, fileName) in urls)
+                try
                 {
-                    var downloader = ForkToHttpDownloader(new Uri(url), filename: fileName);
-                    _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.TaskId, downloader.CurrentTask.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
+                    var responseBody = await response.TextAsync();
+                    var urls = GetUrls(match, responseBody);
+
+                    foreach (var (url, fileName) in urls)
+                    {
+                        var downloader = ForkToHttpDownloader(new Uri(url), filename: fileName);
+                        _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.TaskId, downloader.CurrentTask.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    CurrentTask.ErrorMessage = ex.Message;
+                    _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Error);
+                }
+                finally
+                {
+                    tcs.TrySetResult();
                 }
             }
         };

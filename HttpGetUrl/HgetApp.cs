@@ -3,7 +3,7 @@ using YoutubeDLSharp;
 
 namespace HttpGetUrl;
 
-public class HgetApp(DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, PwService pwService)
+public class HgetApp(DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, PwService pwService)
 {
     private readonly DownloaderFactory _downloaderFactory = downloaderFactory;
     private readonly StorageService _storageService = storageService;
@@ -170,7 +170,11 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
 
     public async ValueTask<string> UpgradeYtdlp()
     {
-        await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), "-U", true);
+        var arg = "-U";
+        if (proxyService.TestUseProxy("github.com"))
+            arg += " --proxy " + proxyService.Proxy;
+
+        await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), arg, true);
         return await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), "--version");
     }
 }

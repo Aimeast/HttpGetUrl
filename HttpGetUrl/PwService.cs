@@ -1,12 +1,18 @@
 ﻿using Microsoft.Playwright;
+using System.Net;
+using Cookie = Microsoft.Playwright.Cookie;
 
 namespace HttpGetUrl;
 
-public class PwService(IConfiguration configuration, StorageService storageService)
+public class PwService(IConfiguration configuration, StorageService storageService, ProxyService proxyService)
 {
     private static readonly SemaphoreSlim _semaphoreSlim = new(1, 1);
-    private readonly string _proxy = configuration.GetValue<string>("Hget:Proxy");
     private readonly string _userDataDir = storageService.GetUserDataDir();
+    private readonly HttpClientHandler _httpClientHandler = new()
+    {
+        Proxy = new WebProxy(configuration.GetValue<string>("Hget:Proxy")),
+        AutomaticDecompression = DecompressionMethods.All
+    };
 
     private IPlaywright _playwright;
     private IBrowserContext _browserContext;
@@ -33,19 +39,18 @@ public class PwService(IConfiguration configuration, StorageService storageServi
                 if (_browserContext == null)
                 {
                     var contextOptions = new BrowserTypeLaunchPersistentContextOptions { Headless = true };
-                    if (!string.IsNullOrEmpty(_proxy))
-                        contextOptions.Proxy = new Proxy { Server = _proxy };
                     _playwright = await Playwright.CreateAsync();
-                    _browserContext = await _playwright.Firefox.LaunchPersistentContextAsync(Path.Combine(_userDataDir, "firefox"), contextOptions);
+                    _browserContext = await _playwright.Chromium.LaunchPersistentContextAsync(Path.Combine(_userDataDir, "Chromium"), contextOptions);
+                    await _browserContext.RouteAsync(x => proxyService.TestUseProxy(new Uri(x).Host), RouteHandler);
 
-                    _ = Task.Run(() =>
+                    _ = Task.Run(async () =>
                     {
                         var idle = Math.Max(configuration.GetValue<int>("Hget:PwServiceAlive", 10), 3);
                         while (DateTime.Now - _lastAccess < TimeSpan.FromMinutes(idle))
                         {
                             Thread.Sleep(60_000);
                         }
-                        _ = InternalClose();
+                        await InternalClose();
                     });
                 }
             }
@@ -53,6 +58,43 @@ public class PwService(IConfiguration configuration, StorageService storageServi
             {
                 _semaphoreSlim.Release();
             }
+        }
+    }
+
+    private async Task RouteHandler(IRoute route)
+    {
+        var request = route.Request;
+        var url = request.Url;
+
+        var client = new HttpClient(_httpClientHandler);
+        using var forwardRequest = new HttpRequestMessage(new HttpMethod(request.Method), url);
+
+        foreach (var header in request.Headers)
+        {
+            forwardRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        if (request.PostDataBuffer != null && (request.Method == "POST" || request.Method == "PUT" || request.Method == "PATCH"))
+        {
+            forwardRequest.Content = new ByteArrayContent(request.PostDataBuffer);
+        }
+
+        try
+        {
+            using var response = await client.SendAsync(forwardRequest);
+            var bodyBytes = await response.Content.ReadAsByteArrayAsync();
+
+            await route.FulfillAsync(new()
+            {
+                Status = (int)response.StatusCode,
+                ContentType = response.Content.Headers.ContentType?.ToString(),
+                Headers = response.Headers.ToDictionary(h => h.Key, h => h.Value.First()),
+                BodyBytes = bodyBytes,
+            });
+        }
+        catch (Exception ex)
+        {
+            await route.AbortAsync();
         }
     }
 
