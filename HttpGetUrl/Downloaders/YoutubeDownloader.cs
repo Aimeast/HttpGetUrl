@@ -37,7 +37,7 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         var result = await FetchVideoAsync(CurrentTask.Url);
         var isPlaylist = result.Data?.Entries != null;
         if (isPlaylist)
-            AnalysisPlayList(result.Data.Entries);
+            AnalysisPlayList(result.Data.Entries.Reverse());
         else if (result.Success)
         {
             CurrentTask.Url = new Uri(result.Data.WebpageUrl);
