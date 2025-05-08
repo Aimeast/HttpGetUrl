@@ -54,7 +54,10 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
         }
         CurrentTask.FileName ??= filename;
         if (RequestRange == null || RequestRange.From == 0)
+        {
             CurrentTask.EstimatedLength = contentLength;
+            CurrentTask.DownloadedLength = 0;
+        }
         _taskCache.SaveTaskStatusDeferred(CurrentTask);
     }
 

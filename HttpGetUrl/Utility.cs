@@ -233,7 +233,7 @@ public static class Utility
         else
             process.Close();
 
-        return output.Trim();
+        return output?.Trim() ?? process.ExitCode.ToString();
     }
 
     public static string FormatSize(long size)

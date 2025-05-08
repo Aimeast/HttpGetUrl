@@ -6,6 +6,8 @@ namespace HttpGetUrl.Downloaders;
 public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, PwService pwService, IConfiguration configuration)
     : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, configuration)
 {
+    private const int TIMEOUT = 60_000 * 2; // 2 minuts
+
     private readonly PwService _pwService = pwService;
 
     public override async Task Analysis()
@@ -52,10 +54,15 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
         };
         await page.GotoAsync(CurrentTask.Url.ToString(), new PageGotoOptions
         {
-            Timeout = 60_000 * 2, // 2 minuts
+            Timeout = TIMEOUT,
             WaitUntil = WaitUntilState.DOMContentLoaded, // wait until the DOMContentLoaded event is fired, not all resources
         });
-        await tcs.Task;
+        await Task.WhenAny(tcs.Task, Task.Delay(TIMEOUT));
+        if (!tcs.Task.IsCompleted)
+        {
+            CurrentTask.ErrorMessage = $"Timeout {TIMEOUT / 1000}s for find resources.";
+            _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Error);
+        }
         await page.CloseAsync();
     }
 
@@ -77,7 +84,7 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
                     task.ErrorMessage = null;
                     _taskCache.SaveTaskStatusDeferred(task, TaskStatus.Pending);
                     var downloader = ForkToHttpDownloader(task.Url, seq: task.Seq);
-                    _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.TaskId, downloader.CurrentTask.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
+                    _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.TaskId, task.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
                 }
             }
         }
