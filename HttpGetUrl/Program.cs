@@ -29,13 +29,12 @@ public class Program
         }
 
         var app = builder.Build();
-        app.UseFileServer(new FileServerOptions
+
+        app.UseDefaultFiles();
+        app.UseStaticFiles(new StaticFileOptions
         {
-            StaticFileOptions =
-            {
-                ServeUnknownFileTypes = true,
-                DefaultContentType = "application/octet-stream"
-            }
+            ServeUnknownFileTypes = true,
+            DefaultContentType = "application/octet-stream",
         });
         if (!builder.Environment.IsDevelopment())
         {

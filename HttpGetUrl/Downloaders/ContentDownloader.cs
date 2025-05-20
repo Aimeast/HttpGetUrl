@@ -118,9 +118,19 @@ public abstract class ContentDownloader
             ?? _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
         newTask.Url = url;
         newTask.Referrer = referrer;
-        newTask.FileName = filename;
+        newTask.FileName = ReplaceInvalidChars(filename);
         var http = _downloaderFactory.CreateHttpDownloader(newTask, CancellationTokenSource);
         http._httpClientHandler = _httpClientHandler;
         return http;
+    }
+
+    private string ReplaceInvalidChars(string fileName, char replacement = '_')
+    {
+        if (string.IsNullOrEmpty(fileName))
+            return fileName;
+
+        var invalidChars = Path.GetInvalidFileNameChars();
+
+        return string.Concat(fileName.Select(c => invalidChars.Contains(c) ? replacement : c));
     }
 }

@@ -57,7 +57,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
      "https_port": 443,
      "Kestrel": {
        "EndpointDefaults": {
-         "Protocols": "Http1AndHttp2AndHttp3"
+         "Protocols": "Http1AndHttp2AndHttp3" // Http3 may crash on linux ruleless
        },
        "Endpoints": {
          "Http": {
