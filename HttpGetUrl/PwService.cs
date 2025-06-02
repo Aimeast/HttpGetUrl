@@ -1,4 +1,5 @@
-﻿using Microsoft.Playwright;
+﻿using HttpGetUrl.Models;
+using Microsoft.Playwright;
 using System.Net;
 using Cookie = Microsoft.Playwright.Cookie;
 

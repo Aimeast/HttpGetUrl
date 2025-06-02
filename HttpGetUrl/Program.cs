@@ -1,3 +1,4 @@
+using HttpGetUrl.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
 
@@ -16,6 +17,8 @@ public class Program
             .AddSingleton<TaskStorageCache>()
             .AddSingleton<TaskService>()
             .AddSingleton<PwService>()
+            .AddScoped<UserSpaceFile>()
+            .AddHostedService<CleanUserSpaceHostedService>()
             .AddHostedService<PwServiceHostedService>();
         if (!builder.Environment.IsDevelopment())
         {
@@ -42,15 +45,23 @@ public class Program
             app.UseHttpsRedirection()
                 .UseHsts();
         }
+        app.UseMiddleware<UserSpaceMiddleware>();
 
         app.MapGet("/task",
-            ([FromServices] HgetApp hget) => hget.GetTaskItems());
+            ([FromServices] HgetApp hget,
+            [FromServices] UserSpaceFile userSpace) => hget.GetTaskItems(userSpace.Space));
         app.MapPost("/task",
-            ([FromServices] HgetApp hget, TaskFile task) => hget.CreateTask(task));
+            ([FromServices] HgetApp hget,
+            [FromServices] UserSpaceFile userSpace,
+            TaskFile task) => hget.CreateTask(userSpace.Space, task));
         app.MapDelete("/task",
-            ([FromServices] HgetApp hget, string taskId) => hget.DeleteTask(taskId));
+            ([FromServices] HgetApp hget,
+            [FromServices] UserSpaceFile userSpace,
+            string taskId) => hget.DeleteTask(userSpace.Space, taskId));
         app.MapPatch("/task",
-            ([FromServices] HgetApp hget, string taskId) => hget.ResumeTask(taskId));
+            ([FromServices] HgetApp hget,
+            [FromServices] UserSpaceFile userSpace,
+            string taskId) => hget.ResumeTask(userSpace.Space, taskId));
         app.MapGet("/tokens",
             ([FromServices] HgetApp hget) => hget.GetTokens());
         app.MapPost("/tokens", async

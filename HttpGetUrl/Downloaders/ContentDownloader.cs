@@ -1,4 +1,5 @@
-﻿using Microsoft.Playwright;
+﻿using HttpGetUrl.Models;
+using Microsoft.Playwright;
 using System.Net;
 using System.Net.Http.Headers;
 using Cookie = System.Net.Cookie;
@@ -114,8 +115,9 @@ public abstract class ContentDownloader
 
     public HttpDownloader ForkToHttpDownloader(Uri url, Uri referrer = null, string filename = null, int? seq = null)
     {
-        TaskFile newTask = _taskCache.GetTaskItems(CurrentTask.TaskId).FirstOrDefault(x => filename != null && x.FileName == filename || x.Seq == seq)
-            ?? _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
+        TaskFile newTask = _taskCache.GetTaskItems(CurrentTask.UserSpace, CurrentTask.TaskId)
+            .FirstOrDefault(x => filename != null && x.FileName == filename || x.Seq == seq)
+            ?? _taskCache.GetNextTaskItemSequence(CurrentTask.UserSpace, CurrentTask.TaskId);
         newTask.Url = url;
         newTask.Referrer = referrer;
         newTask.FileName = ReplaceInvalidChars(filename);

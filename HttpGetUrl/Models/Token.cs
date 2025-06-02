@@ -1,4 +1,4 @@
-﻿namespace HttpGetUrl;
+﻿namespace HttpGetUrl.Models;
 
 public class Token
 {

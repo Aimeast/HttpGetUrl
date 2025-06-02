@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Headers;
+﻿using HttpGetUrl.Models;
+using System.Net.Http.Headers;
 
 namespace HttpGetUrl.Downloaders;
 
@@ -74,7 +75,7 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
             var bytesRead = 0;
             var buffer = new byte[16 * 1024];
             using var responseStream = await httpResponseMessage.Content.ReadAsStreamAsync(linkedCancelSource.Token);
-            using var fileStream = _storageService.OpenFileStream(CurrentTask.TaskId, CurrentTask.FileName, RequestRange?.From);
+            using var fileStream = _storageService.OpenFileStream(CurrentTask.UserSpace, CurrentTask.TaskId, CurrentTask.FileName, RequestRange?.From);
             while ((bytesRead = await responseStream.ReadAsync(buffer, linkedCancelSource.Token)) > 0)
             {
                 await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead));
@@ -99,7 +100,8 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
         CurrentTask.FileName = null;
         _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Pending);
 
-        _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.TaskId, CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+        _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.UserSpace, CurrentTask.TaskId,
+            CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
         await Task.CompletedTask;
     }
 }

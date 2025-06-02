@@ -1,4 +1,4 @@
-﻿using System;
+﻿using HttpGetUrl.Models;
 using System.Text.RegularExpressions;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Metadata;
@@ -53,7 +53,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
                 continue;
 
             var subTask = AddSubTask(videoData.Title, new Uri(videoData.Url));
-            var info = new TaskService.TaskInfo(subTask.TaskId, subTask.Seq, async () =>
+            var info = new TaskService.TaskInfo(subTask.UserSpace, subTask.TaskId, subTask.Seq, async () =>
             {
                 _taskCache.SaveTaskStatusDeferred(subTask, TaskStatus.Downloading);
                 var result = await FetchVideoDataAsync(new Uri(videoData.Url));
@@ -73,7 +73,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
 
     private TaskFile AddSubTask(string title, Uri url)
     {
-        var subTask = _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
+        var subTask = _taskCache.GetNextTaskItemSequence(CurrentTask.UserSpace, CurrentTask.TaskId);
         subTask.FileName = $"{title}";
         subTask.Url = url;
         _taskCache.SaveTaskStatusDeferred(subTask);
@@ -98,7 +98,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         var options = new OptionSet
         {
             Cookies = Path.Combine(".hg", "tokens.txt"),
-            Output = _storageService.GetFilePath(CurrentTask.TaskId, ".")
+            Output = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId, ".")
                 + Path.DirectorySeparatorChar
                 + Utility.TruncateStringInUtf8(CurrentTask.FileName, 145, 100) + ".%(ext)s",
         };
@@ -146,7 +146,8 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         CurrentTask.FileName = null;
         _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Pending);
 
-        _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.TaskId, CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+        _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.UserSpace, CurrentTask.TaskId,
+            CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
         await Task.CompletedTask;
     }
 

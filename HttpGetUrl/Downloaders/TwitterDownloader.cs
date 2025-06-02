@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using HttpGetUrl.Models;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace HttpGetUrl.Downloaders;
@@ -35,7 +36,8 @@ public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellati
         }
 
         var full_text = selectedJson.SearchJson("full_text").First().ToString();
-        var urlNodes = selectedJson.SearchJson("entities").SearchJson("video_info").Select(x => x.SearchJson("url").LastOrDefault()).ToArray();
+        var urlNodes = selectedJson.SearchJson("entities").SearchJson("video_info")
+            .Select(x => x.SearchJson("url").LastOrDefault()).ToArray();
 
         CurrentTask.ContentText = full_text;
 

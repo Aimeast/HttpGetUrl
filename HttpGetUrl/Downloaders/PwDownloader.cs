@@ -1,4 +1,5 @@
-﻿using Microsoft.Playwright;
+﻿using HttpGetUrl.Models;
+using Microsoft.Playwright;
 using System.Text.RegularExpressions;
 
 namespace HttpGetUrl.Downloaders;
@@ -12,7 +13,7 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
 
     public override async Task Analysis()
     {
-        var urls = new List<string>();
+        var urls = new List<(string Url, string FileName)>();
         var tcs = new TaskCompletionSource();
         var page = await _pwService.NewPageAsync();
         page.Response += async (_, response) =>
@@ -33,13 +34,7 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
                 try
                 {
                     var responseBody = await response.TextAsync();
-                    var urls = GetUrls(match, responseBody);
-
-                    foreach (var (url, fileName) in urls)
-                    {
-                        var downloader = ForkToHttpDownloader(new Uri(url), filename: fileName);
-                        _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.TaskId, downloader.CurrentTask.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
-                    }
+                    urls = GetUrls(match, responseBody);
                 }
                 catch (Exception ex)
                 {
@@ -58,12 +53,21 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
             WaitUntil = WaitUntilState.DOMContentLoaded, // wait until the DOMContentLoaded event is fired, not all resources
         });
         await Task.WhenAny(tcs.Task, Task.Delay(TIMEOUT));
-        if (!tcs.Task.IsCompleted)
+        await page.CloseAsync();
+        if (tcs.Task.IsCompleted)
+        {
+            foreach (var (url, fileName) in urls)
+            {
+                var downloader = ForkToHttpDownloader(new Uri(url), filename: fileName);
+                _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.UserSpace, downloader.CurrentTask.TaskId,
+                    downloader.CurrentTask.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
+            }
+        }
+        else
         {
             CurrentTask.ErrorMessage = $"Timeout {TIMEOUT / 1000}s for find resources.";
             _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Error);
         }
-        await page.CloseAsync();
     }
 
     public override async Task Download()
@@ -73,7 +77,7 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
 
     public override async Task Resume()
     {
-        var tasks = _taskCache.GetTaskItems(CurrentTask.TaskId);
+        var tasks = _taskCache.GetTaskItems(CurrentTask.UserSpace, CurrentTask.TaskId);
         if (tasks[0].Status == TaskStatus.Completed)
         {
             for (var i = 1; i < tasks.Length; i++)
@@ -84,19 +88,21 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
                     task.ErrorMessage = null;
                     _taskCache.SaveTaskStatusDeferred(task, TaskStatus.Pending);
                     var downloader = ForkToHttpDownloader(task.Url, seq: task.Seq);
-                    _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.TaskId, task.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
+                    _taskService.QueueTask(new TaskService.TaskInfo(downloader.CurrentTask.UserSpace, downloader.CurrentTask.TaskId,
+                        task.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
                 }
             }
         }
         else
         {
-            _taskCache.FlushTasks(tasks[..1]);
+            _taskCache.FlushTasks(CurrentTask.UserSpace, tasks[..1]);
 
             CurrentTask.ContentText = null;
             CurrentTask.ErrorMessage = null;
             _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Pending);
 
-            _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.TaskId, CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+            _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.UserSpace, CurrentTask.TaskId, CurrentTask.Seq,
+                ExecuteDownloadProcessAsync, CancellationTokenSource));
         }
         await Task.CompletedTask;
     }

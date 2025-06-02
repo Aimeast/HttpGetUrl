@@ -1,4 +1,5 @@
 ﻿using FFMpegCore;
+using HttpGetUrl.Models;
 using System.Net.Http.Headers;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Metadata;
@@ -41,13 +42,13 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         else if (result.Success)
         {
             CurrentTask.Url = new Uri(result.Data.WebpageUrl);
-            var virtualTask = _taskCache.GetExistTaskItem(CurrentTask.TaskId, CurrentTask.Url);
+            var virtualTask = _taskCache.GetExistTaskItem(CurrentTask.UserSpace, CurrentTask.TaskId, CurrentTask.Url);
             if (virtualTask != null)
                 return;
 
             virtualTask = AddVirtualTask(result.Data.Title, CurrentTask.Url);
             var meta = AnalysisVideo(result.Data);
-            var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq,
+            var info = new TaskService.TaskInfo(virtualTask.UserSpace, virtualTask.TaskId, virtualTask.Seq,
                 async () => await ExecDownloadAsync(meta, virtualTask), CancellationTokenSource);
             _taskService.QueueTask(info);
         }
@@ -64,7 +65,7 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
             if (videoData.Duration == null)
                 continue;
             var url = new Uri(videoData.Url);
-            var virtualTask = _taskCache.GetExistTaskItem(CurrentTask.TaskId, url);
+            var virtualTask = _taskCache.GetExistTaskItem(CurrentTask.UserSpace, CurrentTask.TaskId, url);
             if (virtualTask != null)
                 continue;
             virtualTask = AddVirtualTask(videoData.Title, url);
@@ -74,7 +75,7 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
 
     private void QueueVirtualTask(TaskFile virtualTask)
     {
-        var info = new TaskService.TaskInfo(virtualTask.TaskId, virtualTask.Seq, async () =>
+        var info = new TaskService.TaskInfo(virtualTask.UserSpace, virtualTask.TaskId, virtualTask.Seq, async () =>
         {
             _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Downloading);
             var result = await FetchVideoAsync(virtualTask.Url);
@@ -95,7 +96,7 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
     private TaskFile AddVirtualTask(string title, Uri url)
     {
         // virtual task for show file line on web UI
-        var virtualTask = _taskCache.GetNextTaskItemSequence(CurrentTask.TaskId);
+        var virtualTask = _taskCache.GetNextTaskItemSequence(CurrentTask.UserSpace, CurrentTask.TaskId);
         virtualTask.FileName = $"{title}";
         virtualTask.Url = url;
         virtualTask.IsVirtual = true;
@@ -140,26 +141,52 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         d1.CurrentTask.ParentSeq = virtualTask.Seq;
         d1.CurrentTask.IsHide = true;
         d1.CurrentTask.FileName = f1;
-        d1.CurrentTask.DownloadedLength = _storageService.GetFileLength(CurrentTask.TaskId, f1) ?? 0;
+        d1.CurrentTask.DownloadedLength = _storageService.GetFileLength(CurrentTask.UserSpace, CurrentTask.TaskId, f1) ?? 0;
         d1.RequestRange = new RangeItemHeaderValue(d1.CurrentTask.DownloadedLength, null);
 
-        var f2 = $"{meta.VideoId}-audio.{meta.ContainerName}";
-        var d2 = ForkToHttpDownloader(new Uri(meta.AudioUrl), filename: f2);
-        d2.CurrentTask.ParentSeq = virtualTask.Seq;
-        d2.CurrentTask.IsHide = true;
-        d2.CurrentTask.FileName = f2;
-        d2.CurrentTask.DownloadedLength = _storageService.GetFileLength(CurrentTask.TaskId, f2) ?? 0;
-        d2.RequestRange = new RangeItemHeaderValue(d2.CurrentTask.DownloadedLength, null);
+        if (meta.AudioUrl == null)
+        {
+            await ComplateTask(meta, virtualTask, d1);
+        }
+        else
+        {
+            var f2 = $"{meta.VideoId}-audio.{meta.ContainerName}";
+            var d2 = ForkToHttpDownloader(new Uri(meta.AudioUrl), filename: f2);
+            d2.CurrentTask.ParentSeq = virtualTask.Seq;
+            d2.CurrentTask.IsHide = true;
+            d2.CurrentTask.FileName = f2;
+            d2.CurrentTask.DownloadedLength = _storageService.GetFileLength(CurrentTask.UserSpace, CurrentTask.TaskId, f2) ?? 0;
+            d2.RequestRange = new RangeItemHeaderValue(d2.CurrentTask.DownloadedLength, null);
 
+            await ComplateTask(meta, virtualTask, d1, d2);
+        }
+    }
+
+    private async Task ComplateTask(VideoMeta meta, TaskFile virtualTask, ContentDownloader d1)
+    {
+        await d1.ExecuteDownloadProcessAsync();
+
+        var videoFilePath = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId,
+            $"{meta.VideoId}-video.{meta.ContainerName}");
+        var distFilePath = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId,
+            $"{Utility.TruncateStringInUtf8(meta.Title, 145, 100)}.{meta.ContainerName}");
+        File.Move(videoFilePath, distFilePath);
+        virtualTask.DownloadedLength = new FileInfo(distFilePath).Length;
+        _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Completed);
+    }
+
+    private async Task ComplateTask(VideoMeta meta, TaskFile virtualTask, ContentDownloader d1, ContentDownloader d2)
+    {
         var task1 = d1.ExecuteDownloadProcessAsync();
         var task2 = d2.ExecuteDownloadProcessAsync();
         await Task.WhenAll(task1, task2);
+
         if (d1.CurrentTask.Status != TaskStatus.Error && d2.CurrentTask.Status != TaskStatus.Error)
         {
             _taskCache.SaveTaskStatusDeferred(virtualTask, TaskStatus.Merging);
             try
             {
-                var distFilePath = await MergeAsync(virtualTask.TaskId, meta.VideoId, meta.Title, meta.ContainerName);
+                var distFilePath = await MergeAsync(virtualTask.UserSpace, virtualTask.TaskId, meta.VideoId, meta.Title, meta.ContainerName);
                 var partially = d1.CurrentTask.Status == TaskStatus.PartiallyCompleted || d2.CurrentTask.Status == TaskStatus.PartiallyCompleted;
                 virtualTask.DownloadedLength = new FileInfo(distFilePath).Length;
                 _taskCache.SaveTaskStatusDeferred(virtualTask, partially ? TaskStatus.PartiallyCompleted : TaskStatus.Completed);
@@ -176,12 +203,12 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         }
     }
 
-    private async ValueTask<string> MergeAsync(string taskId, string videoId, string title, string containerName)
+    private async ValueTask<string> MergeAsync(string userSpace, string taskId, string videoId, string title, string containerName)
     {
-        var videoFilePath = _storageService.GetFilePath(taskId, $"{videoId}-video.{containerName}");
-        var audioFilePath = _storageService.GetFilePath(taskId, $"{videoId}-audio.{containerName}");
-        var outputFilePath = _storageService.GetFilePath(taskId, $"{videoId}-output.{containerName}");
-        var distFilePath = _storageService.GetFilePath(taskId, $"{Utility.TruncateStringInUtf8(title, 145, 100)}.{containerName}");
+        var videoFilePath = _storageService.GetFilePath(userSpace, taskId, $"{videoId}-video.{containerName}");
+        var audioFilePath = _storageService.GetFilePath(userSpace, taskId, $"{videoId}-audio.{containerName}");
+        var outputFilePath = _storageService.GetFilePath(userSpace, taskId, $"{videoId}-output.{containerName}");
+        var distFilePath = _storageService.GetFilePath(userSpace, taskId, $"{Utility.TruncateStringInUtf8(title, 145, 100)}.{containerName}");
 
         var result = await FFMpegArguments
             .FromFileInput(videoFilePath)
@@ -207,10 +234,11 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
 
     public override async Task Resume()
     {
-        var tasks = _taskCache.GetTaskItems(CurrentTask.TaskId);
+        var tasks = _taskCache.GetTaskItems(CurrentTask.UserSpace, CurrentTask.TaskId);
 
         if (tasks[0].FileName == null)
-            _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.TaskId, CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+            _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.UserSpace, CurrentTask.TaskId,
+                CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
 
         foreach (var task in tasks)
             if (task.Status != TaskStatus.Completed)

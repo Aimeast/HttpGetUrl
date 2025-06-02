@@ -85,7 +85,6 @@
                 const oneYearLater = new Date();
                 oneYearLater.setFullYear(oneYearLater.getFullYear() + 1); // Default max age is one year from now
                 const localExpirationDate = oneYearLater.toLocaleString(); // Local time format
-                const isoExpirationDate = oneYearLater.toISOString(); // ISO format
 
                 $('#tokenTableBody').append(`
                     <tr>
@@ -93,7 +92,7 @@
                         <td data-label="Name"><input type="text" class="form-control"></td>
                         <td data-label="Value"><input type="text" class="form-control rowValue"></td>
                         <td data-label="Path"><input type="text" class="form-control" value="/"></td>
-                        <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
+                        <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}"></td>
                         <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                     </tr>
                 `);
@@ -121,7 +120,6 @@
                     data.forEach(function (token) {
                         const expires = new Date(token.expires);
                         const localExpirationDate = token.expires ? expires.toLocaleString() : '';
-                        const isoExpirationDate = token.expires;
                         const isExpired = expires < now;
 
                         $('#tokenTableBody').append(`
@@ -130,7 +128,7 @@
                                 <td data-label="Name"><span>${token.name}</span></td>
                                 <td data-label="Value"><input type="text" class="form-control rowValue" value="${token.value}"></td>
                                 <td data-label="Path"><span>${token.path}</span></td>
-                                <td data-label="Expires"><input type="text" class="form-control" style="${isExpired ? 'color: darkred' : ''}" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
+                                <td data-label="Expires"><input type="text" class="form-control" style="${isExpired ? 'color: darkred' : ''}" value="${localExpirationDate}"></td>
                                 <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                             </tr>
                         `);
@@ -153,7 +151,7 @@
                     const name = td.eq(1).find('input').val() || td.eq(1).find('span').text();
                     const value = td.eq(2).find('input').val();
                     const path = td.eq(3).find('input').val() || td.eq(3).find('span').text();
-                    const expires = td.eq(4).find('input').data('isoDate');
+                    const expires = new Date(td.eq(4).find('input').val());
 
                     if (new Date(expires) > now)
                         data.push({ name: name, value: value, domain: domain, path: path, expires: expires });
@@ -170,6 +168,7 @@
                     success: function (response) {
                         refreshData();
                         showStatusMessage(`Submit data successfully`, 'success');
+                        hasDeleting = false;
                     },
                     error: function (xhr, status, error) {
                         showStatusMessage(`Submit data error: ` + error, 'danger');
@@ -192,7 +191,6 @@
 
                         let found = false;
                         const localExpirationDate = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toLocaleString() : '';
-                        const isoExpirationDate = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toISOString() : '';
 
                         // Iterate through existing rows to check for matching rows
                         existingRows.each(function () {
@@ -205,7 +203,6 @@
                                 td.eq(2).find('input').val(cookie.value);
                                 td.eq(3).find('input').val(cookie.path);
                                 td.eq(4).find('input').val(localExpirationDate);
-                                td.eq(4).find('input').data('isoDate', isoExpirationDate);
                                 found = true;
                                 return false; // Exit each loop
                             }
@@ -219,7 +216,7 @@
                                     <td data-label="Name"><input type="text" class="form-control" value="${cookie.name}"></td>
                                     <td data-label="Value"><input type="text" class="form-control" value="${cookie.value}"></td>
                                     <td data-label="Path"><input type="text" class="form-control" value="${cookie.path}"></td>
-                                    <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}" data-iso-date="${isoExpirationDate}"></td>
+                                    <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}"></td>
                                     <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                                 </tr>
                             `);

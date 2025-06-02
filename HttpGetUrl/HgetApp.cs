@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Nodes;
+﻿using HttpGetUrl.Models;
+using System.Text.Json.Nodes;
 using YoutubeDLSharp;
 
 namespace HttpGetUrl;
@@ -12,13 +13,17 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
     private readonly PwService _pwService = pwService;
     private readonly DateTimeOffset _statupTime = DateTimeOffset.Now;
 
-    public IEnumerable<TaskFile[]> GetTaskItems()
+    public IEnumerable<TaskFile[]> GetTaskItems(string userSpace)
     {
-        var ids = _storageService.GetAllTaskId();
+        var ids = _storageService.GetAllTaskId(userSpace);
         var items = new List<TaskFile[]>();
         foreach (var id in ids)
         {
-            var item = _taskCache.GetTaskItems(id);
+            var item = _taskCache.GetTaskItems(userSpace, id);
+            foreach (var e in item)
+            {
+                e.UserSpace = userSpace;
+            }
             if (item != null)
             {
                 item = GroupItem(item);
@@ -49,31 +54,33 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
         return item.Take(1).Concat(item.Skip(1).Where(x => !x.IsHide)).ToArray();
     }
 
-    public IResult CreateTask(TaskFile task)
+    public IResult CreateTask(string userSpace, TaskFile task)
     {
         if (!task.Url.IsAbsoluteUri || task.Url.Scheme != Uri.UriSchemeHttp && task.Url.Scheme != Uri.UriSchemeHttps)
         {
             return Results.BadRequest($"Only {string.Join('/', [Uri.UriSchemeHttp, Uri.UriSchemeHttps])} is supported.");
         }
 
+        task.UserSpace = userSpace;
         task.TaskId = DateTime.Now.ToString("yyMMdd-HHmmss");
         task.EstimatedLength = -1;
         task.Status = TaskStatus.Pending;
 
         var downloader = _downloaderFactory.CreateDownloader(task);
-        _storageService.PrepareDirectory(task.TaskId);
-        _storageService.SaveTasks([task]);
-        _taskService.QueueTask(new TaskService.TaskInfo(task.TaskId, task.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
+        _storageService.PrepareDirectory(userSpace, task.TaskId);
+        _storageService.SaveTasks(userSpace, [task]);
+        _taskService.QueueTask(new TaskService.TaskInfo(userSpace, task.TaskId,
+            task.Seq, downloader.ExecuteDownloadProcessAsync, downloader.CancellationTokenSource));
 
         return Results.Ok();
     }
 
-    public IResult DeleteTask(string taskId)
+    public IResult DeleteTask(string userSpace, string taskId)
     {
         try
         {
-            _taskService.CancelTask(taskId);
-            _taskCache.DeleteTask(taskId);
+            _taskService.CancelTask(userSpace, taskId);
+            _taskCache.DeleteTask(userSpace, taskId);
 
             return Results.Ok();
         }
@@ -83,12 +90,12 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
         }
     }
 
-    public IResult ResumeTask(string taskId)
+    public IResult ResumeTask(string userSpace, string taskId)
     {
-        var tasks = _taskCache.GetTaskItems(taskId);
-        if (_taskService.ExistTask(taskId))
+        if (_taskService.ExistTask(userSpace, taskId))
             return Results.Conflict($"Task {taskId} is running, not able to resume it.");
 
+        var tasks = _taskCache.GetTaskItems(userSpace, taskId);
         var downloader = _downloaderFactory.CreateDownloader(tasks[0]);
         downloader.Resume();
 

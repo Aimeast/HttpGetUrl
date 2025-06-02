@@ -1,4 +1,5 @@
 ﻿using HttpGetUrl.Downloaders;
+using HttpGetUrl.Models;
 using System.Reflection;
 
 namespace HttpGetUrl;

@@ -1,4 +1,6 @@
-﻿namespace HttpGetUrl;
+﻿using HttpGetUrl.Models;
+
+namespace HttpGetUrl;
 
 public class PwOptions
 {

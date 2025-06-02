@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.FileProviders;
+﻿using HttpGetUrl.Models;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.FileProviders.Physical;
 using System.Text;
 using System.Text.Json;
@@ -17,21 +18,65 @@ public class StorageService(IHostEnvironment hostEnvironment)
         return _hostEnvironment.ContentRootPath;
     }
 
-    public IEnumerable<string> GetAllTaskId()
+    public IEnumerable<string> GetAllUserSpace()
     {
         return _hostEnvironment
             .ContentRootFileProvider
             .GetDirectoryContents("wwwroot")
-            .Where(x => x.IsDirectory && Regex.IsMatch(x.Name, @"^hg-\d{6}-\d{6}$"))
+            .Where(x => x.IsDirectory && Regex.IsMatch(x.Name, @"^hg-[A-Za-z\d\-_]{8}$"))
             .Select(x => x.Name[3..])
             .OrderByDescending(x => x);
     }
 
-    public TaskFile[] GetTaskItems(string taskId)
+    public UserSpaceFile GetUserSpace(string userSpace)
     {
-        var jsonPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}", $".{taskId}.json");
+        var jsonPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace}", $".json");
         var content = "";
-        using (StringLock.LockString($"storage-{taskId}"))
+        using (StringLock.LockString($"storage-{userSpace}"))
+            try
+            {
+                content = File.ReadAllText(jsonPath);
+            }
+            catch (Exception ex)
+            {
+                return null;
+            }
+        var item = JsonSerializer.Deserialize<UserSpaceFile>(content);
+        return item;
+    }
+
+    public void DeleteUserSpace(string userSpace)
+    {
+        var folderPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace}");
+        Directory.Delete(folderPath, true);
+    }
+
+    public IEnumerable<string> GetAllTaskId(string userSpace)
+    {
+        return _hostEnvironment
+            .ContentRootFileProvider
+            .GetDirectoryContents("wwwroot/hg-" + userSpace)
+            .Where(x => x.IsDirectory && Regex.IsMatch(x.Name, @"^\d{6}-\d{6}$"))
+            .Select(x => x.Name)
+            .OrderByDescending(x => x);
+    }
+
+    public void SaveUserSpace(UserSpaceFile userSpace)
+    {
+        var dir = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace.Space}");
+        if (!Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+        var jsonPath = Path.Combine(dir, $".json");
+        var content = JsonSerializer.Serialize(userSpace);
+        using (StringLock.LockString($"storage-{userSpace}"))
+            File.WriteAllText(jsonPath, content);
+    }
+
+    public TaskFile[] GetTaskItems(string userSpace, string taskId)
+    {
+        var jsonPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace}", taskId, $".{taskId}.json");
+        var content = "";
+        using (StringLock.LockString($"storage-{userSpace}.{taskId}"))
             try
             {
                 content = File.ReadAllText(jsonPath);
@@ -44,39 +89,39 @@ public class StorageService(IHostEnvironment hostEnvironment)
         return item;
     }
 
-    public void SaveTasks(TaskFile[] tasks)
+    public void SaveTasks(string userSpace, TaskFile[] tasks)
     {
         var taskId = tasks[0].TaskId;
-        var jsonPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}", $".{taskId}.json");
+        var jsonPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace}", taskId, $".{taskId}.json");
         var content = JsonSerializer.Serialize(tasks);
-        using (StringLock.LockString($"storage-{taskId}"))
+        using (StringLock.LockString($"storage-{userSpace}.{taskId}"))
             File.WriteAllText(jsonPath, content);
     }
 
-    public void DeleteTask(string taskId)
+    public void DeleteTask(string userSpace, string taskId)
     {
-        var folderPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}");
+        var folderPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace}", taskId);
         Directory.Delete(folderPath, true);
     }
 
-    public void PrepareDirectory(string taskId)
+    public void PrepareDirectory(string userSpace, string taskId)
     {
-        var folderPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}");
+        var folderPath = Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace}", taskId);
         Directory.CreateDirectory(folderPath);
     }
 
-    public FileStream OpenFileStream(string taskId, string filename, long? position)
+    public FileStream OpenFileStream(string userSpace, string taskId, string filename, long? position)
     {
-        var filePath = GetFilePath(taskId, filename);
+        var filePath = GetFilePath(userSpace, taskId, filename);
         var stream = File.OpenWrite(filePath);
         stream.Position = position ?? 0;
         stream.SetLength(stream.Position);
         return stream;
     }
 
-    public long? GetFileLength(string taskId, string filename)
+    public long? GetFileLength(string userSpace, string taskId, string filename)
     {
-        var filePath = GetFilePath(taskId, filename);
+        var filePath = GetFilePath(userSpace, taskId, filename);
         var info = new FileInfo(filePath);
         if (info.Exists)
             return info.Length;
@@ -84,9 +129,9 @@ public class StorageService(IHostEnvironment hostEnvironment)
             return null;
     }
 
-    public string GetFilePath(string taskId, string filename)
+    public string GetFilePath(string userSpace, string taskId, string filename)
     {
-        var filePath = Path.GetFullPath(Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{taskId}", filename));
+        var filePath = Path.GetFullPath(Path.Combine(_hostEnvironment.ContentRootPath, "wwwroot", $"hg-{userSpace}", taskId, filename));
         return filePath;
     }
 
