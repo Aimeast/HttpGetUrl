@@ -33,7 +33,8 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
         httpResponseMessage.EnsureSuccessStatusCode();
 
         var contentLength = httpResponseMessage.Content.Headers.ContentLength ?? -1;
-        var filename = httpResponseMessage.Content.Headers.ContentDisposition?.FileName?.Trim('"') ?? "";
+        var disposition = httpResponseMessage.Content.Headers.ContentDisposition;
+        var filename = (disposition?.FileNameStar ?? disposition?.FileName ?? "").Trim('"');
         if (string.IsNullOrEmpty(filename))
         {
             filename = Path.GetFileName(httpResponseMessage.RequestMessage?.RequestUri?.LocalPath)?.Trim();
