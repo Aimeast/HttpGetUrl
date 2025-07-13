@@ -87,7 +87,7 @@ public abstract class ContentDownloader
             catch (PlaywrightException ex) when (++times < _maxRetry)
             {
                 retry = true;
-                await Task.Delay(times * 15_000);
+                await Task.Delay(times * 15_000, CancellationTokenSource.Token);
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden && this is HttpDownloader httpDownloader)
             {
@@ -103,7 +103,7 @@ public abstract class ContentDownloader
             {
                 retry = true;
                 httpDownloader.RequestRange = new RangeItemHeaderValue(CurrentTask.DownloadedLength, null);
-                await Task.Delay(times * 15_000);
+                await Task.Delay(times * 15_000, CancellationTokenSource.Token);
             }
             catch (Exception ex)
             {

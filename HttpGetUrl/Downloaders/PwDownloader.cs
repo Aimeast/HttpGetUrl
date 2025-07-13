@@ -52,7 +52,7 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
             Timeout = TIMEOUT,
             WaitUntil = WaitUntilState.DOMContentLoaded, // wait until the DOMContentLoaded event is fired, not all resources
         });
-        await Task.WhenAny(tcs.Task, Task.Delay(TIMEOUT));
+        await Task.WhenAny(tcs.Task, Task.Delay(TIMEOUT, CancellationTokenSource.Token));
         await page.CloseAsync();
         if (tcs.Task.IsCompleted)
         {
