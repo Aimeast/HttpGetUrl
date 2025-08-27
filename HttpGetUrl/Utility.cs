@@ -221,19 +221,21 @@ public static class Utility
             FileName = path,
             Arguments = args,
             RedirectStandardOutput = true,
+            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
         using var process = new Process { StartInfo = processStartInfo };
         process.Start();
-        var output = await process.StandardOutput.ReadLineAsync();
+        var std = await process.StandardOutput.ReadLineAsync();
+        var err = await process.StandardError.ReadLineAsync();
         if (wait)
-            process.WaitForExit();
+            await process.WaitForExitAsync();
         else
             process.Close();
 
-        return output?.Trim() ?? process.ExitCode.ToString();
+        return (std ?? err)?.Trim() ?? process.ExitCode.ToString();
     }
 
     public static string FormatSize(long size)

@@ -1,4 +1,4 @@
-﻿namespace HttpGetUrl;
+﻿namespace HttpGetUrl.HostedServices;
 
 public class PwServiceHostedService(PwService pwService) : IHostedService
 {

@@ -1,3 +1,4 @@
+using HttpGetUrl.HostedServices;
 using HttpGetUrl.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -19,6 +20,7 @@ public class Program
             .AddSingleton<PwService>()
             .AddScoped<UserSpaceFile>()
             .AddHostedService<CleanUserSpaceHostedService>()
+            .AddHostedService<UpgradeYtdlpHostedService>()
             .AddHostedService<PwServiceHostedService>();
         if (!builder.Environment.IsDevelopment())
         {
