@@ -7,8 +7,11 @@ namespace HttpGetUrl;
 
 public class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
+        var cts = new CancellationTokenSource();
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => cts.Cancel();
+
         var builder = WebApplication.CreateBuilder(args);
         builder.Services
             .AddSingleton<HgetApp>()
@@ -72,7 +75,8 @@ public class Program
             ([FromServices] HgetApp hget, HttpContext context) => await hget.GetSystemInfoAsync(context));
         app.MapGet("/upytdlp", async
             ([FromServices] HgetApp hget) => await hget.UpgradeYtdlp());
+        app.MapGet("/shutdown", () => cts.Cancel());
 
-        app.Run();
+        await app.RunAsync(cts.Token);
     }
 }

@@ -53,6 +53,8 @@ public abstract class ContentDownloader
         }
 
         var httpClient = new HttpClient(_httpClientHandler) { Timeout = TimeSpan.FromSeconds(30) };
+        httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0");
         return httpClient;
     }
 
@@ -89,13 +91,10 @@ public abstract class ContentDownloader
                 retry = true;
                 await Task.Delay(times * 15_000, CancellationTokenSource.Token);
             }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden && this is HttpDownloader httpDownloader)
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden && this is HttpDownloader httpDownloader && httpDownloader.CurrentTask.Referrer == null)
             {
-                if (httpDownloader.CurrentTask.Referrer == null)
-                {
-                    retry = true;
-                    httpDownloader.CurrentTask.Referrer = httpDownloader.CurrentTask.Url;
-                }
+                retry = true;
+                httpDownloader.CurrentTask.Referrer = httpDownloader.CurrentTask.Url;
             }
             catch (Exception ex) when
             ((ex is IOException || ex is TimeoutException || ex is HttpRequestException)
