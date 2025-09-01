@@ -1,4 +1,5 @@
 ﻿using HttpGetUrl.Models;
+using Microsoft.Playwright;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -8,10 +9,13 @@ namespace HttpGetUrl.Downloaders;
 public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, PwService pwService, IConfiguration configuration)
     : PwDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, pwService, configuration)
 {
-    protected override string UrlRegex => @"/graphql/.+/(?<act>TweetResultByRestId|TweetDetail)";
-
-    protected override List<(string Url, string FileName)> GetUrls(Match match, string content)
+    protected override async Task<MatchResult> Match(IResponse response)
     {
+        var match = Regex.Match(response.Url, @"/graphql/.+/(?<act>TweetResultByRestId|TweetDetail)");
+        if (!match.Success)
+            return new MatchResult { MatchStatus = MatchStatus.NotYet };
+
+        var content = await response.TextAsync();
         // TweetResultByRestId: not login in
         // TweetDetail: logined
         var logined = match.Groups["act"].Value == "TweetDetail";
@@ -51,6 +55,6 @@ public class TwitterDownloader(TaskFile task, CancellationTokenSource cancellati
                 urls.Add((videoUrl, Path.GetFileName(new Uri(videoUrl).LocalPath)));
             }
         }
-        return urls;
+        return new MatchResult { MatchStatus = MatchStatus.Success, Values = urls };
     }
 }

@@ -203,30 +203,6 @@ public class YoutubeDownloader(TaskFile task, CancellationTokenSource cancellati
         }
     }
 
-    private async ValueTask<string> MergeAsync(string userSpace, string taskId, string videoId, string title, string containerName)
-    {
-        var videoFilePath = _storageService.GetFilePath(userSpace, taskId, $"{videoId}-video.{containerName}");
-        var audioFilePath = _storageService.GetFilePath(userSpace, taskId, $"{videoId}-audio.{containerName}");
-        var outputFilePath = _storageService.GetFilePath(userSpace, taskId, $"{videoId}-output.{containerName}");
-        var distFilePath = _storageService.GetFilePath(userSpace, taskId, $"{Utility.TruncateStringInUtf8(title, 145, 100)}.{containerName}");
-
-        var result = await FFMpegArguments
-            .FromFileInput(videoFilePath)
-            .AddFileInput(audioFilePath)
-            .OutputToFile(outputFilePath, overwrite: true, options => options
-                .WithVideoCodec("copy")
-                .WithAudioCodec("copy"))
-            .ProcessAsynchronously();
-
-        if (!result)
-            throw new FormatException($"Convert {videoId} to {containerName} error.");
-
-        File.Delete(videoFilePath);
-        File.Delete(audioFilePath);
-        File.Move(outputFilePath, distFilePath);
-        return distFilePath;
-    }
-
     public override async Task Download()
     {
         await Task.CompletedTask;

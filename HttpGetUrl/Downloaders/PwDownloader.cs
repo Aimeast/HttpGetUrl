@@ -1,6 +1,5 @@
 ﻿using HttpGetUrl.Models;
 using Microsoft.Playwright;
-using System.Text.RegularExpressions;
 
 namespace HttpGetUrl.Downloaders;
 
@@ -28,23 +27,25 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
             if (tcs.Task.IsCompleted || page.IsClosed)
                 return;
 
-            var match = Regex.Match(response.Url, UrlRegex);
-            if (match.Success)
+            var result = default(MatchResult);
+            try
             {
-                try
+                result = await Match(response);
+
+                if (result.MatchStatus == MatchStatus.Success)
                 {
-                    var responseBody = await response.TextAsync();
-                    urls = GetUrls(match, responseBody);
+                    urls = result.Values;
                 }
-                catch (Exception ex)
-                {
-                    CurrentTask.ErrorMessage = ex.Message;
-                    _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Error);
-                }
-                finally
-                {
+            }
+            catch (Exception ex)
+            {
+                CurrentTask.ErrorMessage = ex.Message;
+                _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Error);
+            }
+            finally
+            {
+                if (result.MatchStatus != MatchStatus.NotYet)
                     tcs.TrySetResult();
-                }
             }
         };
         await page.GotoAsync(CurrentTask.Url.ToString(), new PageGotoOptions
@@ -107,7 +108,5 @@ public abstract class PwDownloader(TaskFile task, CancellationTokenSource cancel
         await Task.CompletedTask;
     }
 
-    protected abstract string UrlRegex { get; }
-
-    protected abstract List<(string Url, string FileName)> GetUrls(Match match, string content);
+    protected abstract Task<MatchResult> Match(IResponse response);
 }
