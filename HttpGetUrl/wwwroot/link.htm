@@ -1,0 +1,205 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GetUrl</title>
+    <link href="./bootstrap-5.3.0.min.css" rel="stylesheet">
+    <script src="./jquery-3.7.1.min.js"></script>
+    <style>
+        .break {
+            word-wrap: break-word;
+            word-break: break-all;
+        }
+
+        @media (max-width: 768px) {
+            .table-responsive-stack thead {
+                display: none;
+            }
+
+            .table-responsive-stack tr {
+                display: flex;
+                flex-direction: column;
+                border: 1px solid #ddd;
+                margin-bottom: 10px;
+            }
+
+            .table-responsive-stack td, .table-responsive-stack th {
+                display: block;
+                text-align: right;
+                border: none;
+            }
+
+                .table-responsive-stack td::before {
+                    content: attr(data-label);
+                    float: left;
+                    font-weight: bold;
+                }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div id="error-message" class="alert alert-danger mt-3" style="display: none;"></div>
+        <div class="table-responsive">
+            <table class="table table-responsive-stack table-striped mt-3">
+                <thead>
+                    <tr>
+                        <th>Metadata</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Data will be appended here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const httpStatusTexts = {
+                200: 'OK',
+                204: 'No Content',
+                400: 'Bad Request',
+                401: 'Unauthorized',
+                403: 'Forbidden',
+                404: 'Not Found',
+                405: 'Method Not Allowed',
+                406: 'Not Acceptable',
+                409: 'Conflict',
+                500: 'Internal Server Error',
+                503: 'Service Unavailable',
+            };
+
+            // UI
+            function showError(title, statusCode, text) {
+                $('#error-message').multiline(
+                    `${statusCode} ${httpStatusTexts[statusCode] || 'Unknown Error'}\n${title}. ${text ?? ''}`).show();
+            }
+            function hideError() { $('#error-message').hide(); }
+
+            // Helper Functions
+            function getUrlParent(fullUrl) {
+                try {
+                    var url = new URL(fullUrl);
+                    var baseUrl = url.origin;
+                    var path = url.pathname;
+                    if (path !== "" && !path.endsWith("/")) {
+                        path = path.substring(0, path.lastIndexOf("/") + 1);
+                    }
+                    return baseUrl + path;
+                } catch (e) {
+                    return "";
+                }
+            }
+
+            function formatSize(size) {
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                let unitIndex = 0;
+                while (size >= 1000 && unitIndex < units.length - 1) {
+                    size /= 1024;
+                    unitIndex++;
+                }
+                return `${size.toFixed(Math.min(unitIndex, 2))}${units[unitIndex]}`;
+            }
+
+            function truncateUrl(url, maxLength = 100) {
+                if (url.length <= maxLength) {
+                    return url;
+                }
+                const origin = new URL(url).origin;
+                const truncatedPart = url.slice(-maxLength + origin.length + 9);
+                return `${origin}/......${truncatedPart}`;
+            }
+
+            function calcSizeText(item) {
+                const showEstimated = item.estimatedLength >= 0 && item.status == 2;
+                const showDownloaded = item.status != 3 || !showEstimated;
+                var result = '';
+                if (showDownloaded)
+                    result += formatSize(item.downloadedLength);
+                if (showDownloaded && showEstimated)
+                    result += ' / ';
+                if (showEstimated)
+                    result += formatSize(item.estimatedLength);
+                return result;
+            }
+
+            function mapStatusToEmoji(status) {
+                switch (status) {
+                    case 0: return '\ud83d\udd52';      // Pending
+                    case 1: return '\ud83d\udd75\u2753';// NotFound
+                    case 2: return '\u23f3';            // Downloading
+                    case 3: return '\ud83d\udee0';      // Merging
+                    case 4: return '\ud83d\udd36';      // PartiallyCompleted
+                    case 5: return '\u2705';            // Completed
+                    default: return '\u274c';           // Error -1
+                }
+            }
+
+            // Api url
+            const apiUrl = getUrlParent(window.location.href) + 'task';
+
+            function refreshTable() {
+                if (document.hidden)
+                    return;
+                hideError();
+                const topUrl = new URL(window.location.href);
+                const params = new URLSearchParams(topUrl.search);
+                const userSpace = params.get("userSpace");
+                const id = params.get("id");
+                $.get(`${apiUrl}/${userSpace}/${id}`, function (item) {
+                    $('#table-body').empty();
+
+                    var seq = 0;
+                    var filelines = '';
+                    if (item[0].contentText) {
+                        filelines += `<tr><td colspan="3">${item[0].contentText}</td></tr>`;
+                    }
+                    item.forEach(function (file) {
+                        if (file.isHide)
+                            return;
+                        filelines +=
+                            `<tr>
+                                <td data-label="\u2116">${++seq}</td>
+                                <td data-label="File" class="break">${mapStatusToEmoji(file.status)}<a target="_blank" href="./hg-${file.userSpace}/${file.taskId}/${encodeURIComponent(file.fileName)}">${file.fileName ?? ''}</a> ${file.errorMessage ?? ''}</td>
+                                <td data-label="Size">${calcSizeText(file)}</td>
+                            </tr>`;
+                    });
+                    var subtable =
+                        `<div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>&#x2116;</th>
+                                        <th>File</th>
+                                        <th>Size</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                ${filelines}
+                                </tbody>
+                            </table>
+                        </div>`;
+                    $('#table-body').append(
+                        `<tr>
+                            <td><div><a rel="noreferrer" target="_blank" class="break" href="${item[0].url}">${truncateUrl(item[0].url)}</a> ${item[0].errorMessage ?? ''} ${subtable}</div></td>
+                        </tr>`
+                    );
+                }).fail(function (jqXHR, textStatus, errorThrown) {
+                    showError('Failed to refresh data', jqXHR.status, jqXHR.responseJSON);
+                });
+            }
+
+            // Event Bindings
+            $(document).ready(function () {
+                // Automatically refresh table
+                $(document).on('visibilitychange', refreshTable);
+                setInterval(refreshTable, 15000);
+                refreshTable();
+            });
+        })();
+        document.title += ' - ' + window.location.hostname;
+    </script>
+</body>
+</html>

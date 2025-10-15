@@ -52,6 +52,10 @@ public class Program
         }
         app.UseMiddleware<UserSpaceMiddleware>();
 
+        app.MapGet("/task/{userSpace}/{id}",
+            ([FromServices] HgetApp hget,
+            string userSpace,
+            string id) => hget.GetTaskItem(userSpace, id));
         app.MapGet("/task",
             ([FromServices] HgetApp hget,
             [FromServices] UserSpaceFile userSpace) => hget.GetTaskItems(userSpace.Space));

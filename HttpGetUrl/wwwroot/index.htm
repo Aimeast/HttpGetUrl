@@ -419,19 +419,22 @@
                                     ${filelines}
                                     </tbody>
                                 </table>
-                                ${seq > 1 ? '<button class="btn btn-sm btn-light copylink-btn">Copy Links</button>' : ''}
                             </div>`;
                         $('#table-body').append(
                             `<tr>
                                 <td data-label="TaskId">${item[0].taskId}</td>
                                 <td><div><a rel="noreferrer" target="_blank" class="break" href="${item[0].url}">${truncateUrl(item[0].url)}</a> ${item[0].errorMessage ?? ''} ${subtable}</div></td>
-                                <td data-label="Action"><button class="btn btn-sm btn-secondary resume-btn" data-taskid="${item[0].taskId}">Resume</button><button class="btn btn-danger btn-sm delete-btn" data-taskid="${item[0].taskId}" data-files="${htmlEscape(item.filter(x => !x.isHide).map(x => x.fileName).join(','))}">Delete</button></td>
+                                <td data-label="Action">
+                                    <button class="btn btn-sm btn-secondary resume-btn" data-taskid="${item[0].taskId}">Resume</button><button class="btn btn-danger btn-sm delete-btn" data-taskid="${item[0].taskId}" data-files="${htmlEscape(item.filter(x => !x.isHide).map(x => x.fileName).join(','))}">Delete</button>
+                                    ${seq > 1 ? '<button class="btn btn-sm btn-light copylink-btn">Copy Links</button>' : ''}<button class="btn btn-sm btn-light share-btn" data-taskid="${item[0].taskId}">Share</button>
+                                </td>
                             </tr>`
                         );
                     });
                     $('.copylink-btn').off('click').on('click', handleCopyLinks);
                     $('.resume-btn').off('click').on('click', handleResume);
                     $('.delete-btn').off('click').on('click', handleDelete);
+                    $('.share-btn').off('click').on('click', handleShare);
                 }).fail(function (jqXHR, textStatus, errorThrown) {
                     showError('Failed to refresh data', jqXHR.status, jqXHR.responseJSON);
                 });
@@ -477,6 +480,14 @@
                     links += absoluteUrl + '\n';
                 });
                 navigator.clipboard.writeText(links);
+            }
+
+            function handleShare() {
+                const userSpace = getUserSpace(true);
+                const taskId = $(this).data('taskid');
+                const link = getUrlParent(window.location.href) + `link.htm?userSpace=${userSpace}&id=${taskId}`;
+                navigator.clipboard.writeText(link);
+                window.open(link, '_blank');
             }
 
             function handleResume() {

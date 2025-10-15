@@ -13,22 +13,28 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
     private readonly PwService _pwService = pwService;
     private readonly DateTimeOffset _statupTime = DateTimeOffset.Now;
 
+    public TaskFile[] GetTaskItem(string userSpace, string id)
+    {
+        var item = _taskCache.GetTaskItems(userSpace, id);
+        foreach (var e in item)
+        {
+            e.UserSpace = userSpace;
+        }
+        if (item != null)
+        {
+            item = GroupItem(item);
+        }
+        return item;
+    }
+
     public IEnumerable<TaskFile[]> GetTaskItems(string userSpace)
     {
         var ids = _storageService.GetAllTaskId(userSpace);
         var items = new List<TaskFile[]>();
         foreach (var id in ids)
         {
-            var item = _taskCache.GetTaskItems(userSpace, id);
-            foreach (var e in item)
-            {
-                e.UserSpace = userSpace;
-            }
-            if (item != null)
-            {
-                item = GroupItem(item);
-                items.Add(item);
-            }
+            var item = GetTaskItem(userSpace, id);
+            items?.Add(item);
         }
         return items;
     }
