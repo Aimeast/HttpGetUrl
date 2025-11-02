@@ -42,16 +42,12 @@ public class HttpDownloader(TaskFile task, CancellationTokenSource cancellationT
             {
                 filename = "default";
             }
-            var ext = Path.GetExtension(filename);
             var mediaType = httpResponseMessage.Content.Headers.ContentType?.MediaType;
-            if (mediaType != "application/octet-stream" || string.IsNullOrEmpty(ext))
+            if (!string.IsNullOrEmpty(mediaType) && Utility.Mimes.TryGetValue(mediaType, out var ext))
             {
-                if (mediaType != null && Utility.Mimes.TryGetValue(mediaType, out ext))
-                    ext = "." + ext.Split(',')[0];
-                else
-                    ext = ".bin";
-                if (!filename.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
-                    filename += ext;
+                var exts = ext.Split(',');
+                if (exts.Contains(Path.GetExtension(filename).ToLower()))
+                    filename += exts[0];
             }
         }
         CurrentTask.FileName ??= filename;

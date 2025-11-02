@@ -98,6 +98,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         var options = new OptionSet
         {
             Cookies = Path.Combine(".hg", "tokens.txt"),
+            Format = "bestvideo[vcodec^=avc1]+bestaudio/best",
             Output = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId, ".")
                 + Path.DirectorySeparatorChar
                 + Utility.TruncateStringInUtf8(CurrentTask.FileName, 145, 100) + ".%(ext)s",

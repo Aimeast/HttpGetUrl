@@ -29,8 +29,12 @@ public class UserSpaceMiddleware(RequestDelegate next)
             RandomNumberGenerator.Fill(bytes);
             userSpace.Space = Base64Url.EncodeToString(bytes);
         }
+        else
+        {
+            userSpace = storageService.GetUserSpace(userSpace.Space);
+        }
 
-        if (userSpace.Expires < DateTimeOffset.UtcNow.AddDays(14))
+        if (userSpace.Expires < DateTimeOffset.UtcNow.AddDays(30))
         {
             userSpace.Expires = DateTimeOffset.UtcNow.AddDays(31);
             SetCookie(context, userSpace);
@@ -44,7 +48,7 @@ public class UserSpaceMiddleware(RequestDelegate next)
     {
         var cookieOptions = new CookieOptions
         {
-            Expires = userSpace.Expires,
+            Expires = userSpace.Expires.AddDays(30),
             HttpOnly = false,
             Secure = context.Request.IsHttps,
             SameSite = SameSiteMode.Lax,
