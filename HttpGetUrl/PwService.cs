@@ -41,6 +41,7 @@ public class PwService(IConfiguration configuration, StorageService storageServi
                 {
                     var contextOptions = new BrowserTypeLaunchPersistentContextOptions { Headless = true };
                     _playwright = await Playwright.CreateAsync();
+                    await CheckAndInstallDeps();
                     _browserContext = await _playwright.Chromium.LaunchPersistentContextAsync(Path.Combine(_userDataDir, "Chromium"), contextOptions);
                     await _browserContext.RouteAsync(x => proxyService.TestUseProxy(new Uri(x).Host), RouteHandler);
 
@@ -60,6 +61,33 @@ public class PwService(IConfiguration configuration, StorageService storageServi
                 _semaphoreSlim.Release();
             }
         }
+    }
+
+    private async Task<bool> CheckDeps()
+    {
+        try
+        {
+            var path = _playwright.Chromium.ExecutablePath;
+            if (string.IsNullOrEmpty(path))
+                return false;
+
+            return File.Exists(path);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task CheckAndInstallDeps()
+    {
+        var installed = await CheckDeps();
+        if (installed)
+            return;
+
+        var exitCode = Microsoft.Playwright.Program.Main(["install"]);
+        if (exitCode != 0)
+            throw new Exception($"Install playwright exited with code {exitCode}");
     }
 
     private async Task RouteHandler(IRoute route)

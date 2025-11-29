@@ -24,14 +24,14 @@ Simply paste the resource URL and submit. The task will be automatically queued.
 
 2. **Install dotnetcore**
 
-   - aspnetcore-runtime-9.0: ASP.NET Core runtime
+   - aspnetcore-runtime-10.0: ASP.NET Core runtime
    - powershell: for installing Playwright.net headless browser
    - python3: as yt-dlp runtime
    - ffmpeg: as codecs
    - libmsquic: for turn on HTTP/3(QUIC)
    ```sh
    apt-get update
-   apt-get install -y aspnetcore-runtime-9.0 powershell python3 ffmpeg libmsquic
+   apt-get install -y aspnetcore-runtime-10.0 powershell python3 ffmpeg libmsquic
    ```
 
 3. **Prepare folders**
@@ -41,7 +41,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
 ### II. Compilation and Deployment
 
 4. **Compile**
-   Publish this project with the target framework `net9.0` and target runtime `linux-x64`.
+   Publish this project with the target framework `net10.0` and target runtime `linux-x64`.
 
 5. **Upload binaries**
    Upload all compiled binaries to the `/usr/local/hget` folder. Compress the `.playwright` directory (which contains numerous JS files) before uploading if necessary. Then grant execute permissions.
@@ -99,26 +99,18 @@ Simply paste the resource URL and submit. The task will be automatically queued.
    pwsh playwright.ps1 install --with-deps
    ```
 
-9. **yt-dlp**
-   ```sh
-   cd /usr/local/hget/.hg
-   wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
-   chmod +x yt-dlp
-   ```
-   If you're having parsing issues with yt-dlp, try updating `yt-dlp` via `yt-dlp -U`
-
 ### IV. Testing
 
-10. **Test run**
+9. **Test run**
     ```sh
     cd /usr/local/hget/
     dotnet HttpGetUrl.dll
     ```
 
-11. **Update token**
+10. **Update token**
     Supports importing `cookie.json` files exported by the Firefox Cookie Manager plugin. Update cookies on the `/tokens.htm` page. Some resources require your login credentials to access them.
 
-12. **Try download urls**
+11. **Try download urls**
     ```txt
     # Single file download
     https://github.com/FFmpeg/FFmpeg/archive/refs/heads/master.zip
@@ -133,7 +125,7 @@ Simply paste the resource URL and submit. The task will be automatically queued.
 
 ### V. Start service
 
-13. **Everything is ready**
+12. **Everything is ready**
     ```sh
     systemctl start hget
     ```
