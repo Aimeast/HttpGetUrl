@@ -37,9 +37,9 @@ public class UserSpaceMiddleware(RequestDelegate next)
         if (userSpace.Expires < DateTimeOffset.UtcNow.AddDays(30))
         {
             userSpace.Expires = DateTimeOffset.UtcNow.AddDays(31);
-            SetCookie(context, userSpace);
             storageService.SaveUserSpace(userSpace);
         }
+        SetCookie(context, userSpace);
 
         await next(context);
     }
