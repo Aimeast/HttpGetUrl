@@ -180,7 +180,7 @@
                 try {
                     const existingRows = $('#tokenTableBody').find('tr');
                     const jsonData = JSON.parse(e.target.result);
-                    const cookies = jsonData.cookies || [];
+                    const cookies = jsonData.cookies || jsonData || [];
 
                     cookies.sort(compareCookies);
                     cookies.forEach(cookie => {

@@ -174,8 +174,8 @@ public class StorageService(IHostEnvironment hostEnvironment)
             string domain = token.Domain.StartsWith('.') ? token.Domain : "." + token.Domain;
             string includeSubdomains = "TRUE";
             string path = token.Path;
-            string secure = "FALSE";
-            long expires = new DateTimeOffset(token.Expires).ToUnixTimeSeconds();
+            string secure = token.Secure ? "TRUE" : "FALSE";
+            long expires = token.Expires.ToUnixTimeSeconds();
             string name = token.Name;
             string value = token.Value;
 

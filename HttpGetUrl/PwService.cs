@@ -171,9 +171,9 @@ public class PwService(IConfiguration configuration, StorageService storageServi
             Value = x.Value,
             Domain = x.Domain,
             Path = x.Path,
-            Expires = new DateTimeOffset(x.Expires.ToUniversalTime()).ToUnixTimeSeconds(),
-            HttpOnly = true,
-            Secure = true,
+            Expires = x.Expires.ToUnixTimeSeconds(),
+            HttpOnly = x.HttpOnly,
+            Secure = x.Secure,
             SameSite = SameSiteAttribute.None,
         });
         await _browserContext.AddCookiesAsync(cookies);

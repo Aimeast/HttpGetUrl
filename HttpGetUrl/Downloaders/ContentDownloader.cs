@@ -49,7 +49,7 @@ public abstract class ContentDownloader
             _httpClientHandler.UseCookies = true;
             foreach (var token in _storageService.GetTokens())
             {
-                _httpClientHandler.CookieContainer.Add(new Cookie(token.Name, token.Value) { Domain = token.Domain, Expires = token.Expires });
+                _httpClientHandler.CookieContainer.Add(new Cookie(token.Name, token.Value) { Domain = token.Domain, Expires = token.Expires.LocalDateTime });
             }
         }
 
@@ -82,10 +82,23 @@ public abstract class ContentDownloader
                 }
                 _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Completed);
             }
-            catch (NotSupportedException ex) when (this is YtdlpDownloader)
+            catch (YtdlpException ex)
             {
-                var downloader = _downloaderFactory.CreateHttpDownloader(CurrentTask);
-                _ = downloader.ExecuteDownloadProcessAsync();
+                var debugex = ex;
+                if (ex.NotSupported)
+                {
+                    var downloader = _downloaderFactory.CreateHttpDownloader(CurrentTask);
+                    _ = downloader.ExecuteDownloadProcessAsync();
+                }
+                else if (ex.NeedCookie)
+                {
+                    var ytdlp = (YtdlpDownloader)this;
+                    if (!ytdlp.UseCookie)
+                    {
+                        ytdlp.UseCookie = true;
+                        retry = true;
+                    }
+                }
             }
             catch (PlaywrightException ex) when (++times < _maxRetry)
             {
@@ -107,6 +120,7 @@ public abstract class ContentDownloader
             }
             catch (Exception ex)
             {
+                var debugex = ex;
                 CurrentTask.ErrorMessage = $"\"{CurrentTask.FileName}\" {Utility.FormatSize(CurrentTask.EstimatedLength - CurrentTask.DownloadedLength)}/{Utility.FormatSize(CurrentTask.EstimatedLength)} loss, retried {times} times. {ex.GetType().Name}: {Utility.TruncateString(ex.Message, 100, 200)}.";
                 _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Error);
             }

@@ -12,10 +12,14 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
 {
     private bool _isPlaylist;
 
+    public bool UseCookie { get; set; }
+
     private async Task<RunResult<VideoData>> FetchVideoDataAsync(Uri url)
     {
         var ytdlp = new YoutubeDL { YoutubeDLPath = Path.Combine(".hg", Utils.YtDlpBinaryName) };
-        var options = new OptionSet { Cookies = Path.Combine(".hg", "tokens.txt") };
+        var options = new OptionSet();
+        if (UseCookie)
+            options.Cookies = Path.Combine(".hg", "tokens.txt");
         if (_proxyService.TestUseProxy(url.Host))
             options.Proxy = _proxyService.Proxy;
 
@@ -27,21 +31,29 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
     public override async Task Analysis()
     {
         var result = await FetchVideoDataAsync(CurrentTask.Url);
+        if (!result.Success && !UseCookie)
+        {
+            var errorMessage = string.Join('\n', result.ErrorOutput);
+            if (errorMessage.Contains("--cookies"))
+                throw new YtdlpException(errorMessage) { NeedCookie = true };
+        }
+
         if (result.Data == null || result.Data.FormatID == "0" // Unsupported url
             || result.Data.Direct) // Direct url
-            throw new NotSupportedException($"Ytdlp not support the Url '{CurrentTask.Url}'.");
+            throw new YtdlpException($"Ytdlp not support the Url '{CurrentTask.Url}'.") { NotSupported = true };
 
         _isPlaylist = result.Data.Entries != null;
         if (_isPlaylist)
             AnalysisPlayList(result.Data.Entries);
         else if (result.Success)
         {
-            CurrentTask.FileName = result.Data.Title;
+            CurrentTask.FileName = Utility.TruncateStringInUtf8(Utility.MakeValidFileName($"{result.Data.Title}.{result.Data.Extension}"), 145, 100);
             _taskCache.SaveTaskStatusDeferred(CurrentTask);
         }
         else
         {
-            throw new Exception(string.Join('\n', result.ErrorOutput));
+            var errorMessage = string.Join('\n', result.ErrorOutput);
+            throw new YtdlpException(errorMessage);
         }
     }
 
@@ -52,7 +64,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
             if (videoData.Duration == null)
                 continue;
 
-            var subTask = AddSubTask(videoData.Title, new Uri(videoData.Url));
+            var subTask = AddSubTask(videoData.Title, videoData.Extension, new Uri(videoData.Url));
             var info = new TaskService.TaskInfo(subTask.UserSpace, subTask.TaskId, subTask.Seq, async () =>
             {
                 _taskCache.SaveTaskStatusDeferred(subTask, TaskStatus.Downloading);
@@ -71,10 +83,10 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         }
     }
 
-    private TaskFile AddSubTask(string title, Uri url)
+    private TaskFile AddSubTask(string title, string ext, Uri url)
     {
         var subTask = _taskCache.GetNextTaskItemSequence(CurrentTask.UserSpace, CurrentTask.TaskId);
-        subTask.FileName = $"{title}";
+        subTask.FileName = Utility.TruncateStringInUtf8(Utility.MakeValidFileName($"{title}.{ext}"), 145, 100);
         subTask.Url = url;
         _taskCache.SaveTaskStatusDeferred(subTask);
         return subTask;
@@ -97,12 +109,14 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         };
         var options = new OptionSet
         {
-            Cookies = Path.Combine(".hg", "tokens.txt"),
+            Progress = true,
             Format = "bestvideo[vcodec^=avc1]+bestaudio/best",
             Output = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId, ".")
                 + Path.DirectorySeparatorChar
-                + Utility.TruncateStringInUtf8(CurrentTask.FileName, 145, 100) + ".%(ext)s",
+                + CurrentTask.FileName,
         };
+        if (UseCookie)
+            options.Cookies = Path.Combine(".hg", "tokens.txt");
         if (_proxyService.TestUseProxy(CurrentTask.Url.Host))
             options.Proxy = _proxyService.Proxy;
         var progress = new Progress<DownloadProgress>(x =>
@@ -131,12 +145,9 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
             progress: progress,
             overrideOptions: options);
         if (result.Success)
-        {
-            CurrentTask.FileName = Path.GetFileName(result.Data);
-            CurrentTask.DownloadedLength = new FileInfo(result.Data).Length;
-        }
+            CurrentTask.DownloadedLength = new FileInfo(options.Output).Length;
         else
-            throw new Exception(string.Join('\n', result.ErrorOutput));
+            throw new YtdlpException(string.Join('\n', result.ErrorOutput));
     }
 
     public override async Task Resume()
@@ -160,4 +171,11 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         public string VideoUrl { get; set; }
         public string AudioUrl { get; set; }
     }
+
+}
+
+public class YtdlpException(string message) : Exception(message)
+{
+    public bool NotSupported { get; set; }
+    public bool NeedCookie { get; set; }
 }
