@@ -507,7 +507,7 @@
 
             function handleDelete() {
                 const taskId = $(this).data('taskid');
-                const files = $(this).data('files');
+                const files = $(this).data('files') + '';
                 if (confirm(`Are you sure you want to delete this item?\nTaskId: ${taskId}\nFiles: ${truncateText(files)}`)) {
                     $.ajax({
                         url: `${apiUrl}?taskId=${taskId}`,
