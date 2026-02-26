@@ -11,6 +11,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
     : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, configuration)
 {
     private bool _isPlaylist;
+    private readonly string _formatSelecter = "bestvideo[vcodec^=avc1]+bestaudio/best";
 
     public bool UseCookie { get; set; }
 
@@ -22,6 +23,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
             options.Cookies = Path.Combine(".hg", "tokens.txt");
         if (_proxyService.TestUseProxy(url.Host))
             options.Proxy = _proxyService.Proxy;
+        options.Format = _formatSelecter;
 
         var result = await ytdlp.RunVideoDataFetch(url.ToString(), ct: CancellationTokenSource.Token, overrideOptions: options);
 
@@ -110,7 +112,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         var options = new OptionSet
         {
             Progress = true,
-            Format = "bestvideo[vcodec^=avc1]+bestaudio/best",
+            Format = _formatSelecter,
             Output = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId, ".")
                 + Path.DirectorySeparatorChar
                 + CurrentTask.FileName,

@@ -31,7 +31,7 @@ public class UserSpaceMiddleware(RequestDelegate next)
         }
         else
         {
-            userSpace = storageService.GetUserSpace(userSpace.Space);
+            userSpace = storageService.GetUserSpace(userSpace.Space) ?? userSpace;
         }
 
         if (userSpace.Expires < DateTimeOffset.UtcNow.AddDays(30))
