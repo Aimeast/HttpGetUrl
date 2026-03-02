@@ -46,7 +46,15 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
 
         _isPlaylist = result.Data.Entries != null;
         if (_isPlaylist)
+        {
+            CurrentTask.IsHide = true;
+            CurrentTask.IsVirtual = true;
+            CurrentTask.ContentText = result.Data.Title;
+            if (!string.IsNullOrEmpty(result.Data.Description))
+                CurrentTask.ContentText += $" -- {result.Data.Description}";
+            _taskCache.SaveTaskStatusDeferred(CurrentTask);
             AnalysisPlayList(result.Data.Entries);
+        }
         else if (result.Success)
         {
             CurrentTask.FileName = Utility.TruncateStringInUtf8(Utility.MakeValidFileName($"{result.Data.Title}.{result.Data.Extension}"), 145, 100);
@@ -55,7 +63,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         else
         {
             var errorMessage = string.Join('\n', result.ErrorOutput);
-            throw new YtdlpException(errorMessage);
+            throw new Exception(errorMessage);
         }
     }
 
@@ -149,19 +157,27 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         if (result.Success)
             CurrentTask.DownloadedLength = new FileInfo(options.Output).Length;
         else
-            throw new YtdlpException(string.Join('\n', result.ErrorOutput));
+            throw new Exception(string.Join('\n', result.ErrorOutput));
     }
 
     public override async Task Resume()
     {
-        if (CurrentTask.Status == TaskStatus.Completed)
-            return;
-
-        CurrentTask.FileName = null;
-        _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Pending);
-
-        _taskService.QueueTask(new TaskService.TaskInfo(CurrentTask.UserSpace, CurrentTask.TaskId,
-            CurrentTask.Seq, ExecuteDownloadProcessAsync, CancellationTokenSource));
+        var tasks = _taskCache.GetTaskItems(CurrentTask.UserSpace, CurrentTask.TaskId);
+        foreach (var task in tasks)
+            if (task.Status != TaskStatus.Completed)
+            {
+                task.ErrorMessage = null;
+                _taskCache.SaveTaskStatusDeferred(task, TaskStatus.Pending);
+                var downloader = this;
+                if (task.Seq != 0)
+                {
+                    downloader = (YtdlpDownloader)_downloaderFactory.CreateDownloader(task, CancellationTokenSource);
+                    task.IsHide = false;
+                    task.IsVirtual = false;
+                }
+                _taskService.QueueTask(new TaskService.TaskInfo(task.UserSpace, task.TaskId,
+                    task.Seq, downloader.ExecuteDownloadProcessAsync, CancellationTokenSource));
+            }
         await Task.CompletedTask;
     }
 
