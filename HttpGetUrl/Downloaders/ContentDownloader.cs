@@ -90,7 +90,7 @@ public abstract class ContentDownloader
                     var downloader = _downloaderFactory.CreateHttpDownloader(CurrentTask);
                     _ = downloader.ExecuteDownloadProcessAsync();
                 }
-                else if (ex.NeedCookie)
+                else if (ex.TryCookie)
                 {
                     var ytdlp = (YtdlpDownloader)this;
                     if (!ytdlp.UseCookie)
@@ -98,6 +98,11 @@ public abstract class ContentDownloader
                         ytdlp.UseCookie = true;
                         retry = true;
                     }
+                }
+                else if (ex.Restricted)
+                {
+                    CurrentTask.ErrorMessage = ex.Message;
+                    _taskCache.SaveTaskStatusDeferred(CurrentTask, TaskStatus.Error);
                 }
             }
             catch (PlaywrightException ex) when (++times < _maxRetry)

@@ -33,11 +33,14 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
     public override async Task Analysis()
     {
         var result = await FetchVideoDataAsync(CurrentTask.Url);
-        if (!result.Success && !UseCookie)
+        if (!result.Success)
         {
-            var errorMessage = string.Join('\n', result.ErrorOutput);
-            if (errorMessage.Contains("--cookies"))
-                throw new YtdlpException(errorMessage) { NeedCookie = true };
+            var errorMessage = string.Join('\n', result.ErrorOutput.Where(x => x.StartsWith("ERROR:")));
+            if (errorMessage.Contains("--cookies")|| errorMessage.Contains("--list-formats"))
+                if (UseCookie)
+                    throw new YtdlpException(errorMessage) { Restricted = true };
+                else
+                    throw new YtdlpException(errorMessage) { TryCookie = true };
         }
 
         if (result.Data == null || result.Data.FormatID == "0" // Unsupported url
@@ -62,7 +65,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         }
         else
         {
-            var errorMessage = string.Join('\n', result.ErrorOutput);
+            var errorMessage = string.Join('\n', result.ErrorOutput.Where(x => x.StartsWith("ERROR:")));
             throw new Exception(errorMessage);
         }
     }
@@ -85,7 +88,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
                 }
                 else
                 {
-                    subTask.ErrorMessage = string.Join('\n', result.ErrorOutput);
+                    subTask.ErrorMessage = string.Join('\n', result.ErrorOutput.Where(x => x.StartsWith("ERROR:")));
                     _taskCache.SaveTaskStatusDeferred(subTask, TaskStatus.Error);
                 }
             }, CancellationTokenSource);
@@ -157,7 +160,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         if (result.Success)
             CurrentTask.DownloadedLength = new FileInfo(options.Output).Length;
         else
-            throw new Exception(string.Join('\n', result.ErrorOutput));
+            throw new Exception(string.Join('\n', result.ErrorOutput.Where(x => x.StartsWith("ERROR:"))));
     }
 
     public override async Task Resume()
@@ -195,5 +198,6 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
 public class YtdlpException(string message) : Exception(message)
 {
     public bool NotSupported { get; set; }
-    public bool NeedCookie { get; set; }
+    public bool TryCookie { get; set; }
+    public bool Restricted { get; set; }
 }
