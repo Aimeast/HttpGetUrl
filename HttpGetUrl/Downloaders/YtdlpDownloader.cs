@@ -11,7 +11,9 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
     : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, configuration)
 {
     private bool _isPlaylist;
-    private readonly string _formatSelecter = "bestvideo[vcodec^=avc1]+bestaudio/best";
+    private readonly string _formatSelecter = "bestvideo+bestaudio/best";
+    private readonly string _formatSort = "vcodec:h264:h265:av01:vp9:vp9.2";
+    private readonly DownloadMergeFormat _mergeFormat = DownloadMergeFormat.Mp4;
 
     public bool UseCookie { get; set; }
 
@@ -24,6 +26,8 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         if (_proxyService.TestUseProxy(url.Host))
             options.Proxy = _proxyService.Proxy;
         options.Format = _formatSelecter;
+        options.FormatSort = _formatSort;
+        options.MergeOutputFormat = _mergeFormat;
 
         var result = await ytdlp.RunVideoDataFetch(url.ToString(), ct: CancellationTokenSource.Token, overrideOptions: options);
 
@@ -36,7 +40,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         if (!result.Success)
         {
             var errorMessage = string.Join('\n', result.ErrorOutput.Where(x => x.StartsWith("ERROR:")));
-            if (errorMessage.Contains("--cookies")|| errorMessage.Contains("--list-formats"))
+            if (errorMessage.Contains("--cookies") || errorMessage.Contains("--list-formats"))
                 if (UseCookie)
                     throw new YtdlpException(errorMessage) { Restricted = true };
                 else
@@ -124,6 +128,8 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         {
             Progress = true,
             Format = _formatSelecter,
+            FormatSort = _formatSort,
+            MergeOutputFormat = _mergeFormat,
             Output = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId, ".")
                 + Path.DirectorySeparatorChar
                 + CurrentTask.FileName,
@@ -177,6 +183,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
                     downloader = (YtdlpDownloader)_downloaderFactory.CreateDownloader(task, CancellationTokenSource);
                     task.IsHide = false;
                     task.IsVirtual = false;
+                    task.EstimatedLength = -1;
                 }
                 _taskService.QueueTask(new TaskService.TaskInfo(task.UserSpace, task.TaskId,
                     task.Seq, downloader.ExecuteDownloadProcessAsync, CancellationTokenSource));
