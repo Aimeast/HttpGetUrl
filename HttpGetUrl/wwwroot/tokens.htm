@@ -47,7 +47,15 @@
 <body>
     <div class="container mt-5">
         <div id="statusMessage" class="alert" style="display: none;"></div>
-        <input type="file" id="fileUpload" accept=".json" class="form-control mb-3" />
+        <textarea id="contentInput" class="form-control mb-3" rows="4" placeholder="Paste JSON / Netscape / Header Cookie string here..."></textarea>
+        <div class="row mb-3">
+            <div class="col-2">
+                <button id="parseContentBtn" class="btn btn-secondary">Parse</button>
+            </div>
+            <div class="col-10">
+                <input type="file" id="fileUpload" accept=".json,.txt" class="form-control" />
+            </div>
+        </div>
         <table class="table table-bordered">
             <thead>
                 <tr>
@@ -55,6 +63,7 @@
                     <th>Name</th>
                     <th>Value</th>
                     <th>Path</th>
+                    <th>Secure</th>
                     <th>Expires</th>
                     <th>Action</th>
                 </tr>
@@ -92,6 +101,7 @@
                         <td data-label="Name"><input type="text" class="form-control"></td>
                         <td data-label="Value"><input type="text" class="form-control rowValue"></td>
                         <td data-label="Path"><input type="text" class="form-control" value="/"></td>
+                        <td data-label="Secure"><input type="text" class="form-control" value="/"></td>
                         <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}"></td>
                         <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                     </tr>
@@ -111,6 +121,57 @@
                 $('.rowValue').off('focus').on('focus', function () { this.select(); });
             }
 
+            function attachCookies(cookies) {
+                const existingRows = $('#tokenTableBody').find('tr');
+
+                const now = new Date();
+                cookies.sort(compareCookies);
+                cookies.forEach(cookie => {
+                    if (!cookie.name || !cookie.domain || !cookie.expirationDate) {
+                        // Skip cookies missing name, domain, or expirationDate
+                        return;
+                    }
+
+                    let found = false;
+                    const localExpirationDate = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toLocaleString() : '';
+
+                    // Iterate through existing rows to check for matching rows
+                    existingRows.each(function () {
+                        const td = $(this).find('td');
+                        const rowDomain = td.eq(0).find('input').val() || td.eq(0).find('span').text();
+                        const rowName = td.eq(1).find('input').val() || td.eq(1).find('span').text();
+
+                        if (rowDomain === cookie.domain && rowName === cookie.name) {
+                            // Update existing row
+                            td.eq(2).find('input').val(cookie.value);
+                            td.eq(3).find('input').val(cookie.path);
+                            td.eq(4).find('input').val(localExpirationDate);
+                            found = true;
+                            return false; // Exit each loop
+                        }
+                    });
+
+                    if (!found) {
+                        const expires = new Date(localExpirationDate);
+                        const isExpired = expires < now;
+                        // Add new row
+                        $('#tokenTableBody').append(`
+                            <tr>
+                                <td data-label="Domain"><input type="text" class="form-control" value="${cookie.domain}"></td>
+                                <td data-label="Name"><input type="text" class="form-control" value="${cookie.name}"></td>
+                                <td data-label="Value"><input type="text" class="form-control" value="${cookie.value}"></td>
+                                <td data-label="Path"><input type="text" class="form-control" value="${cookie.path}"></td>
+                                <td data-label="Secure"><input type="text" class="form-control" value="${cookie.secure}"></td>
+                                <td data-label="Expires"><input type="text" class="form-control" style="${isExpired ? 'color: darkred' : ''}" value="${localExpirationDate}"></td>
+                                <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
+                            </tr>
+                        `);
+                    }
+                });
+
+                attachRowEvent();
+            }
+
             // Events
             function refreshData() {
                 clearStatusMessage();
@@ -128,6 +189,7 @@
                                 <td data-label="Name"><span>${token.name}</span></td>
                                 <td data-label="Value"><input type="text" class="form-control rowValue" value="${token.value}"></td>
                                 <td data-label="Path"><span>${token.path}</span></td>
+                                <td data-label="Secure"><span>${token.secure}</span></td>
                                 <td data-label="Expires"><input type="text" class="form-control" style="${isExpired ? 'color: darkred' : ''}" value="${localExpirationDate}"></td>
                                 <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
                             </tr>
@@ -151,10 +213,11 @@
                     const name = td.eq(1).find('input').val() || td.eq(1).find('span').text();
                     const value = td.eq(2).find('input').val();
                     const path = td.eq(3).find('input').val() || td.eq(3).find('span').text();
-                    const expires = new Date(td.eq(4).find('input').val());
+                    const secure = toBool(td.eq(4).find('input').val() || td.eq(4).find('span').text());
+                    const expires = new Date(td.eq(5).find('input').val());
 
                     if (new Date(expires) > now)
-                        data.push({ name: name, value: value, domain: domain, path: path, expires: expires });
+                        data.push({ name: name, value: value, domain: domain, path: path, secure: secure, expires: expires });
                 });
 
                 // Sort the data before submitting
@@ -176,73 +239,165 @@
                 });
             }
 
-            function parseJson(e) {
-                try {
-                    const existingRows = $('#tokenTableBody').find('tr');
-                    const jsonData = JSON.parse(e.target.result);
-                    const cookies = jsonData.cookies || jsonData || [];
-
-                    cookies.sort(compareCookies);
-                    cookies.forEach(cookie => {
-                        if (!cookie.name || !cookie.domain || !cookie.expirationDate) {
-                            // Skip cookies missing name, domain, or expirationDate
-                            return;
-                        }
-
-                        let found = false;
-                        const localExpirationDate = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toLocaleString() : '';
-
-                        // Iterate through existing rows to check for matching rows
-                        existingRows.each(function () {
-                            const td = $(this).find('td');
-                            const rowDomain = td.eq(0).find('input').val() || td.eq(0).find('span').text();
-                            const rowName = td.eq(1).find('input').val() || td.eq(1).find('span').text();
-
-                            if (rowDomain === cookie.domain && rowName === cookie.name) {
-                                // Update existing row
-                                td.eq(2).find('input').val(cookie.value);
-                                td.eq(3).find('input').val(cookie.path);
-                                td.eq(4).find('input').val(localExpirationDate);
-                                found = true;
-                                return false; // Exit each loop
-                            }
-                        });
-
-                        if (!found) {
-                            // Add new row
-                            $('#tokenTableBody').append(`
-                                <tr>
-                                    <td data-label="Domain"><input type="text" class="form-control" value="${cookie.domain}"></td>
-                                    <td data-label="Name"><input type="text" class="form-control" value="${cookie.name}"></td>
-                                    <td data-label="Value"><input type="text" class="form-control" value="${cookie.value}"></td>
-                                    <td data-label="Path"><input type="text" class="form-control" value="${cookie.path}"></td>
-                                    <td data-label="Expires"><input type="text" class="form-control" value="${localExpirationDate}"></td>
-                                    <td data-label="Actions"><button class="btn btn-danger deleteRow">Delete</button></td>
-                                </tr>
-                            `);
-                        }
-                    });
-
-                    attachRowEvent();
-                } catch (error) {
-                    showStatusMessage('Error parsing JSON file: ' + error.message, 'danger');
-                }
-            };
-
             function handleFileUpload(event) {
                 if (hasDeleting) {
-                    alert("There is data deletion hanging, please submit and then import.");
+                    alert('There is data deletion hanging, please submit and then import.');
                     return;
                 }
                 const file = event.target.files[0];
-                if (file && file.type === 'application/json') {
+                if (file) {
                     const reader = new FileReader();
-                    reader.onload = parseJson;
+                    reader.onload = function (e) {
+                        try {
+                            const cookies = guessAndParseInput(e.target.result);
+                            attachCookies(cookies);
+                        } catch (error) {
+                            showStatusMessage('Error parsing file: ' + error.message, 'danger');
+                        }
+                    };
                     reader.readAsText(file);
                 } else {
-                    showStatusMessage('Please select a valid JSON file.', 'danger');
+                    showStatusMessage('Please select a valid file.', 'danger');
                 }
-                event.target.value = "";
+                event.target.value = '';
+            }
+
+            function handleParseInput() {
+                if (hasDeleting) {
+                    alert('There is data deletion hanging, please submit and then import.');
+                    return;
+                }
+                try {
+                    const contentText = $('#contentInput').val();
+                    const cookies = guessAndParseInput(contentText);
+                    attachCookies(cookies);
+                    $('#contentInput').val('');
+                } catch (error) {
+                    showStatusMessage('Error parsing content: ' + error.message, 'danger');
+                }
+            }
+
+            // Cookies helper
+            function guessAndParseInput(content) {
+                // Try to detect format
+                const trimmedContent = content.trim();
+
+                // Try JSON format
+                if (trimmedContent.startsWith('{') || trimmedContent.startsWith('[')) {
+                    const jsonData = JSON.parse(trimmedContent);
+                    return jsonData.cookies || jsonData || [];
+                }
+
+                // Try Netscape format (contains tabs)
+                const nonCommentLines = trimmedContent.split('\n')
+                    .filter(line => !line.trim().startsWith('#') && line.trim() !== '');
+                if (nonCommentLines.length > 0) {
+                    const firstDataLine = nonCommentLines[0];
+                    const tabCount = (firstDataLine.match(/\t/g) || []).length;
+
+                    // Netscape format should have exactly 6 tabs (7 fields)
+                    if (tabCount >= 6) {
+                        return parseNetscapeFormat(trimmedContent);
+                    }
+                }
+
+                // Try Header format
+                if (trimmedContent.includes('=')) {
+                    return parseHeaderFormat(trimmedContent);
+                }
+
+                showStatusMessage('No valid cookies found in the input', 'danger');
+            }
+
+            function parseNetscapeFormat(content) {
+                const cookies = [];
+                const lines = content.split('\n');
+
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine.startsWith('#') || trimmedLine === '') continue;
+
+                    // Netscape format: domain TRUE/FALSE path secure EXPIRES name value
+                    const parts = trimmedLine.split('\t');
+                    if (parts.length >= 7) {
+                        const oneYearLater = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+                        const expires = parts[4] && parts[4] !== '0' ? parseInt(parts[4]) : oneYearLater;
+
+                        cookies.push({
+                            domain: parts[0],
+                            name: parts[5],
+                            value: parts[6],
+                            path: parts[2],
+                            secure: toBool(parts[3]),
+                            expirationDate: expires
+                        });
+                    }
+                }
+                return cookies;
+            }
+
+            function parseHeaderFormat(content) {
+                const domain = prompt(
+                    'Please enter the domain for these cookies (leave empty to use current domain: ' +
+                    window.location.hostname + '):',
+                    window.location.hostname
+                );
+                if (domain === null) return; // User cancelled
+
+                const cookies = [];
+                const oneYearLater = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+
+                const parts = content.split(';');
+
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i].trim();
+                    const [name, value] = part.split('=');
+
+                    const cookie = {
+                        name: name?.trim() || '',
+                        value: value?.trim() || '',
+                        domain: domain,
+                        path: '/',
+                        secure: false,
+                        expirationDate: oneYearLater
+                    };
+
+                    applyCookiePrefixRules(cookie);
+                    cookies.push(cookie);
+                }
+                return cookies;
+            }
+
+            function parseJsonString(jsonStr) {
+                const jsonData = JSON.parse(jsonStr);
+                const cookies = jsonData.cookies || jsonData || [];
+                return cookies;
+            }
+
+            function applyCookiePrefixRules(cookie) {
+                const name = cookie.name || '';
+
+                if (name.startsWith('__Secure-')) {
+                    cookie.secure = true;
+                }
+
+                if (name.startsWith('__Host-')) {
+                    cookie.secure = true;
+                    cookie.path = '/';
+                    cookie.domain = '';  // No domain means host-only
+                }
+
+                if (name.startsWith('__Http-')) {
+                    cookie.secure = true;
+                    cookie.httpOnly = true;
+                }
+
+                if (name.startsWith('__HostHttp-')) {
+                    cookie.secure = true;
+                    cookie.httpOnly = true;
+                    cookie.path = '/';
+                    cookie.domain = '';
+                }
             }
 
             // Helper Functions
@@ -275,6 +430,10 @@
                 }
             }
 
+            function toBool(boolStr) {
+                return boolStr?.toLowerCase()?.trim() === 'true';
+            }
+
             const apiUrl = getUrlParent(window.location.href) + 'tokens';
             let hasDeleting = false;
 
@@ -282,6 +441,7 @@
                 $('#refresh').click(refreshData);
                 $('#submit').click(submitData);
                 $('#addRow').click(addRow);
+                $('#parseContentBtn').click(handleParseInput);
                 $('#fileUpload').change(handleFileUpload);
                 refreshData();
             });
