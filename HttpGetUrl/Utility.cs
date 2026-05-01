@@ -149,4 +149,16 @@ public static class Utility
         }
         return $"{Math.Round(val, 1)}{units[i]}";
     }
+
+    public static T TryGet<T>(Func<T> action, T fallback = default)
+    {
+        try
+        {
+            return action();
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
 }

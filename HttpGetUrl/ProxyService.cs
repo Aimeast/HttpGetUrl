@@ -35,7 +35,9 @@ public class ProxyService
         if (_bypassGroup == null)
             return true;
 
-        foreach (var ip in Dns.GetHostAddresses(domain))
+        var ipaddress = Utility.TryGet(() => Dns.GetHostAddresses(domain), []);
+
+        foreach (var ip in ipaddress)
         {
             if (_bypassGroup.Match(ip))
                 return false;
