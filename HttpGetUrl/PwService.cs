@@ -1,6 +1,9 @@
 ﻿using HttpGetUrl.Models;
 using Microsoft.Playwright;
+using System.Diagnostics;
 using System.Net;
+using System.Reflection;
+using System.Text;
 using Cookie = Microsoft.Playwright.Cookie;
 
 namespace HttpGetUrl;
@@ -85,9 +88,55 @@ public class PwService(IConfiguration configuration, StorageService storageServi
         if (installed)
             return;
 
-        var exitCode = Microsoft.Playwright.Program.Main(["install"]);
+        var exitCode = proxyService.TestUseProxy("cdn.playwright.dev")
+            ? InstallDepsWithProxy(proxyService.Proxy)
+            : Microsoft.Playwright.Program.Main(["install", "--with-deps"]);
         if (exitCode != 0)
             throw new Exception($"Install playwright exited with code {exitCode}");
+    }
+
+    private int InstallDepsWithProxy(string proxyUrl)
+    {
+        if (!proxyUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"The proxy URL for installing dependencies supports only http/https. '{proxyUrl}'");
+
+        var playwrightDirectory = Path.GetDirectoryName(Assembly.GetAssembly(typeof(Playwright)).Location);
+        var ps1ScriptPath = Path.Combine(playwrightDirectory, "playwright.ps1");
+        if (!File.Exists(ps1ScriptPath))
+            throw new FileNotFoundException($"playwright.ps1 not found at {ps1ScriptPath}");
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "pwsh",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{ps1ScriptPath}\" install --with-deps",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+
+        startInfo.EnvironmentVariables["HTTPS_PROXY"] = proxyUrl;
+        startInfo.EnvironmentVariables["HTTP_PROXY"] = proxyUrl;
+
+        using var process = Process.Start(startInfo);
+        Console.OutputEncoding = Encoding.UTF8;
+        static void copyLoop(StreamReader std, TextWriter con)
+        {
+            var chars = new char[1024];
+            var len = 0;
+            while ((len = std.Read(chars)) > 0)
+            {
+                con.Write(chars[..len]);
+            }
+        }
+        Task.Run(() => copyLoop(process.StandardOutput, Console.Out));
+        Task.Run(() => copyLoop(process.StandardError, Console.Error));
+
+        process.WaitForExit();
+
+        return process.ExitCode;
     }
 
     private async Task RouteHandler(IRoute route)

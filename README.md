@@ -91,26 +91,18 @@ Simply paste the resource URL and submit. The task will be automatically queued.
    systemctl enable hget
    ```
 
-### III. Installing Components
+### III. Testing
 
-8. **Playwright.net**
-   ```sh
-   cd /usr/local/hget
-   pwsh playwright.ps1 install --with-deps
-   ```
-
-### IV. Testing
-
-9. **Test run**
+8. **Test run**
     ```sh
     cd /usr/local/hget/
     dotnet HttpGetUrl.dll
     ```
 
-10. **Update token**
+9. **Update token**
     Supports importing `cookie.json` files exported by the Firefox Cookie Manager plugin. Update cookies on the `/tokens.htm` page. Some resources require your login credentials to access them.
 
-11. **Try download urls**
+10. **Try download urls**
     ```txt
     # Single file download
     https://github.com/FFmpeg/FFmpeg/archive/refs/heads/master.zip
@@ -123,9 +115,9 @@ Simply paste the resource URL and submit. The task will be automatically queued.
     https://youtube.com/playlist?list=PLOGi5-fAu8bGbCMgtuuNf8t-kV28ZhnGa
     ```
 
-### V. Start service
+### IV. Start service
 
-12. **Everything is ready**
+11. **Everything is ready**
     ```sh
     systemctl start hget
     ```
