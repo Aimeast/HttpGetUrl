@@ -159,12 +159,12 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
 
         if (parms.Contains("ytdlp"))
         {
-            infos.Add("ytdlpVersion", await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), "--version"));
+            infos.Add("ytdlpVersion", await Utility.RunCmd(Path.Combine(".hg", Utils.YtDlpBinaryName), "--version"));
         }
 
         if (parms.Contains("ffmpeg"))
         {
-            infos.Add("ffmpegVersion", await Utility.RunCmdFirstLine(Utils.FfmpegBinaryName, "-version"));
+            infos.Add("ffmpegVersion", await Utility.RunCmd(Utils.FfmpegBinaryName, "-version"));
         }
 
         if (parms.Contains("startup"))
@@ -179,15 +179,5 @@ public class HgetApp(DownloaderFactory downloaderFactory, StorageService storage
         }
 
         return infos;
-    }
-
-    public async ValueTask<string> UpgradeYtdlp()
-    {
-        var arg = "-U";
-        if (proxyService.TestUseProxy("github.com"))
-            arg += " --proxy " + proxyService.Proxy;
-
-        await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), arg, true);
-        return await Utility.RunCmdFirstLine(Path.Combine(".hg", Utils.YtDlpBinaryName), "--version");
     }
 }

@@ -35,8 +35,9 @@ Simply paste the resource URL and submit. The task will be automatically queued.
    ```
 
 3. **Prepare folders**
-   Assuming the installation directory is `/usr/local/hget`, prepare the following folders:
-   - `/usr/local/hget/.hg` : Stores hget configurations, `Playwright.net` browser configurations, and the `yt-dlp` executable file.
+   Assuming the installation directory is `/usr/local/hget`, create the `/usr/local/hget/.hg` folder to store hget configurations, `Playwright.net` browser configurations, and some executable files:
+   - `yt-dlp` _A feature-rich command-line audio/video downloader._ https://github.com/yt-dlp/yt-dlp/releases
+   - `deno` _A modern runtime for JavaScript and TypeScript._ https://github.com/denoland/deno/releases (Why is deno needed? See https://github.com/yt-dlp/yt-dlp/wiki/EJS)
 
 ### II. Compilation and Deployment
 

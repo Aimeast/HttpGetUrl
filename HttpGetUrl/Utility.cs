@@ -113,7 +113,7 @@ public static class Utility
         return max;
     }
 
-    public static async ValueTask<string> RunCmdFirstLine(string path, string args, bool wait = false)
+    public static async ValueTask<string> RunCmd(string path, string args, bool firstOrLastLine = true, bool wait = false, string proxyUrl = null)
     {
         var processStartInfo = new ProcessStartInfo
         {
@@ -125,16 +125,29 @@ public static class Utility
             CreateNoWindow = true
         };
 
+        if (!string.IsNullOrEmpty(proxyUrl))
+        {
+            processStartInfo.EnvironmentVariables["HTTPS_PROXY"] = proxyUrl;
+            processStartInfo.EnvironmentVariables["HTTP_PROXY"] = proxyUrl;
+        }
+
         using var process = new Process { StartInfo = processStartInfo };
         process.Start();
-        var std = await process.StandardOutput.ReadLineAsync();
-        var err = await process.StandardError.ReadLineAsync();
+        var line = default(string);
+        var current = default(string);
+        while ((current = await process.StandardOutput.ReadLineAsync() ?? await process.StandardError.ReadLineAsync()) != null)
+        {
+            if (!string.IsNullOrWhiteSpace(current))
+                line = current;
+            if (firstOrLastLine)
+                break;
+        }
         if (wait)
             await process.WaitForExitAsync();
         else
             process.Close();
 
-        return (std ?? err)?.Trim() ?? process.ExitCode.ToString();
+        return line?.Trim() ?? process.ExitCode.ToString();
     }
 
     public static string FormatSize(long size)

@@ -77,8 +77,6 @@ public class Program
             ([FromServices] HgetApp hget, Token[] tokens) => await hget.UpdateTokensAsync(tokens));
         app.MapGet("/info", async
             ([FromServices] HgetApp hget, HttpContext context) => await hget.GetSystemInfoAsync(context));
-        app.MapGet("/upytdlp", async
-            ([FromServices] HgetApp hget) => await hget.UpgradeYtdlp());
         app.MapGet("/shutdown", () => cts.Cancel());
 
         await app.RunAsync(cts.Token);

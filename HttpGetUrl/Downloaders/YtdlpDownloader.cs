@@ -6,7 +6,7 @@ using YoutubeDLSharp.Options;
 
 namespace HttpGetUrl.Downloaders;
 
-[Downloader("Ytdlp", ["*"])]
+[Downloader("Ytdlp", ["*", "youtube.com", "youtu.be"])]
 public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellationTokenSource, DownloaderFactory downloaderFactory, StorageService storageService, TaskService taskService, TaskStorageCache taskCache, ProxyService proxyService, IConfiguration configuration)
     : ContentDownloader(task, cancellationTokenSource, downloaderFactory, storageService, taskService, taskCache, proxyService, configuration)
 {
@@ -20,14 +20,17 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
     private async Task<RunResult<VideoData>> FetchVideoDataAsync(Uri url)
     {
         var ytdlp = new YoutubeDL { YoutubeDLPath = Path.Combine(".hg", Utils.YtDlpBinaryName) };
-        var options = new OptionSet();
+        var options = new OptionSet
+        {
+            Format = _formatSelecter,
+            FormatSort = _formatSort,
+            MergeOutputFormat = _mergeFormat,
+            JsRuntimes = "deno:./.hg/",
+        };
         if (UseCookie)
             options.Cookies = Path.Combine(".hg", "tokens.txt");
         if (_proxyService.TestUseProxy(url.Host))
             options.Proxy = _proxyService.Proxy;
-        options.Format = _formatSelecter;
-        options.FormatSort = _formatSort;
-        options.MergeOutputFormat = _mergeFormat;
 
         var result = await ytdlp.RunVideoDataFetch(url.ToString(), ct: CancellationTokenSource.Token, overrideOptions: options);
 
@@ -36,6 +39,9 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
 
     public override async Task Analysis()
     {
+        CurrentTask.IsHide = false;
+        CurrentTask.IsVirtual = false;
+
         var result = await FetchVideoDataAsync(CurrentTask.Url);
         if (!result.Success)
         {
@@ -45,6 +51,8 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
                     throw new YtdlpException(errorMessage) { Restricted = true };
                 else
                     throw new YtdlpException(errorMessage) { TryCookie = true };
+            else if (errorMessage.Contains("Video unavailable"))
+                throw new YtdlpException(errorMessage) { Restricted = true };
         }
 
         if (result.Data == null || result.Data.FormatID == "0" // Unsupported url
@@ -64,6 +72,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
         }
         else if (result.Success)
         {
+            CurrentTask.Url = new Uri(result.Data.WebpageUrl);
             CurrentTask.FileName = Utility.TruncateStringInUtf8(Utility.MakeValidFileName($"{result.Data.Title}.{result.Data.Extension}"), 145, 100);
             _taskCache.SaveTaskStatusDeferred(CurrentTask);
         }
@@ -130,6 +139,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
             Format = _formatSelecter,
             FormatSort = _formatSort,
             MergeOutputFormat = _mergeFormat,
+            JsRuntimes = "deno:./.hg/",
             Output = _storageService.GetFilePath(CurrentTask.UserSpace, CurrentTask.TaskId, ".")
                 + Path.DirectorySeparatorChar
                 + CurrentTask.FileName,
@@ -138,6 +148,7 @@ public class YtdlpDownloader(TaskFile task, CancellationTokenSource cancellation
             options.Cookies = Path.Combine(".hg", "tokens.txt");
         if (_proxyService.TestUseProxy(CurrentTask.Url.Host))
             options.Proxy = _proxyService.Proxy;
+
         var progress = new Progress<DownloadProgress>(x =>
         {
             var match = Regex.Match(x.TotalDownloadSize ?? "", @"([\d.]+)\s*(K|M|G|T)iB", RegexOptions.IgnoreCase);
